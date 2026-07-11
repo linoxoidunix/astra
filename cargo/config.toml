@@ -1,0 +1,10 @@
+# Офлайн-реестр cargo для Astra: крейты берутся из установленных системных
+# пакетов librust-*-dev (ставятся `sudo apt install librust-<crate>-dev`),
+# а не с crates.io (интернета нет). Ставится в ~/.cargo/config.toml.
+#
+# Собрать проект офлайн:  cargo build --offline
+[source.crates-io]
+replace-with = "debian"
+
+[source.debian]
+directory = "/usr/share/cargo/registry"
