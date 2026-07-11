@@ -43,6 +43,15 @@ bash install/install.sh
 - в терминале выбрать шрифт **JetBrainsMono Nerd Font Mono**
 - открыть новый терминал → `nvim`
 
+### 4. Rust-тулчейн из репозиториев Astra (онлайн, sudo)
+Отдельный скрипт ставит `rustc`/`cargo` и крейты `librust-*-dev` штатным `apt`
+(права поднимает сам через `sudo`):
+```bash
+bash install/install-rust.sh            # тулчейн + ВСЕ librust-*-dev
+bash install/install-rust.sh popular    # тулчейн + типовой набор крейтов
+bash install/install-rust.sh none       # только тулчейн, без крейтов
+```
+
 ## Проверка
 ```bash
 nvim --version

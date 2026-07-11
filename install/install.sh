@@ -24,6 +24,12 @@ tar xzf "$DIST/lazyvim-data.tar.gz"   -C ~/.local/share
 say "rust-analyzer → ~/.local/bin"
 install -m755 "$DIST/bin/rust-analyzer" ~/.local/bin/rust-analyzer
 
+if [ -f "$DIST/parsers.tar.gz" ]; then
+    say "treesitter-парсеры → ~/.config/nvim/parser"
+    mkdir -p ~/.config/nvim/parser
+    tar xzf "$DIST/parsers.tar.gz" -C ~/.config/nvim/parser
+fi
+
 say "Nerd Font → ~/.local/share/fonts"
 tar xzf "$DIST/fonts.tar.gz" -C ~/.local/share/fonts
 fc-cache -f ~/.local/share/fonts >/dev/null 2>&1 || true

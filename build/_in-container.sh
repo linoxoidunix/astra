@@ -12,8 +12,8 @@ CMAKE_VER="${CMAKE_VER:-3.28.3}"
 FONT="${FONT:-JetBrainsMono}"
 TS_LANGS="${TS_LANGS:-c cpp rust lua luadoc vim vimdoc query markdown markdown_inline bash json yaml toml regex printf gitcommit diff}"
 
-DIST=/out/dist
-mkdir -p "$DIST/bin" "$DIST/fonts"
+DIST=/out
+mkdir -p "$DIST/bin" "$DIST/fonts" "$DIST/parsers"
 log(){ printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 
 # ---------------------------------------------------------------- apt / buster
@@ -54,10 +54,6 @@ git clone --depth 1 https://github.com/rust-lang/rust-analyzer /ra
 cp /ra/target/release/rust-analyzer "$DIST/bin/rust-analyzer"
 "$DIST/bin/rust-analyzer" --version
 
-log "tree-sitter CLI (для компиляции парсеров)"
-cargo install --locked tree-sitter-cli
-tree-sitter --version || true
-
 # ---------------------------------------------------------------- LazyVim
 log "LazyVim starter + расширения"
 rm -rf "$HOME/.config/nvim" "$HOME/.local/share/nvim" "$HOME/.local/state/nvim" "$HOME/.cache/nvim"
@@ -79,12 +75,32 @@ log "Lazy! sync (клон плагинов)"
 "$NVIM" --headless "+Lazy! sync" +qa 2>&1 | tail -15 || true
 echo "плагинов: $(ls "$HOME/.local/share/nvim/lazy" | wc -l)"
 
-log "Treesitter-парсеры: $TS_LANGS"
-LUALIST=$(printf "'%s'," $TS_LANGS)
-"$NVIM" --headless \
-  "+lua local ok,ts=pcall(require,'nvim-treesitter'); if ok and ts.install then local h=ts.install({${LUALIST}}); if h and h.wait then h:wait(600000) end end" \
-  "+qa" 2>&1 | tail -15 || true
-echo "парсеры:"; find "$HOME/.local/share/nvim" -name '*.so' -path '*parser*' -printf '%f\n' 2>/dev/null | sort -u
+log "Treesitter-парсеры: компиляция из грамматик по реестру nvim-treesitter"
+cat > /tmp/gen.lua <<'GEN'
+local a=_G.arg; local P=dofile(a[1])
+for i=2,#a do local e=P[a[i]]; if e and e.install_info then
+  io.write(table.concat({a[i],e.install_info.url or '',e.install_info.revision or '',e.install_info.location or ''},'\t'),'\n') end end
+GEN
+REG="$HOME/.local/share/nvim/lazy/nvim-treesitter/lua/nvim-treesitter/parsers.lua"
+"$NVIM" --headless -l /tmp/gen.lua "$REG" $TS_LANGS > /tmp/list.tsv 2>/dev/null || true
+tsok=0; tsfail=0
+while IFS=$'\t' read -r lang url rev loc; do
+  [ -n "$lang" ] || continue
+  d=$(mktemp -d)
+  git clone -q "$url" "$d" 2>/dev/null || { tsfail=$((tsfail+1)); rm -rf "$d"; continue; }
+  [ -n "$rev" ] && { git -C "$d" checkout -q "$rev" 2>/dev/null \
+    || { git -C "$d" fetch -q --depth 1 origin "$rev" 2>/dev/null && git -C "$d" checkout -q FETCH_HEAD 2>/dev/null; }; }
+  src="$d/${loc:+$loc/}src"
+  if [ -f "$src/parser.c" ]; then
+    files="$src/parser.c"; ccb=cc
+    [ -f "$src/scanner.c" ]  && files="$files $src/scanner.c"
+    [ -f "$src/scanner.cc" ] && { files="$files $src/scanner.cc"; ccb=g++; }
+    $ccb -O2 -fPIC -shared -I"$src" $files -o "$DIST/parsers/$lang.so" 2>/dev/null \
+      && tsok=$((tsok+1)) || tsfail=$((tsfail+1))
+  else tsfail=$((tsfail+1)); fi
+  rm -rf "$d"
+done < /tmp/list.tsv
+echo "парсеры: собрано $tsok, не удалось $tsfail"; ls -1 "$DIST/parsers"
 
 # ---------------------------------------------------------------- Nerd Font
 log "Nerd Font ${FONT}"
@@ -100,5 +116,6 @@ tar czf "$DIST/nvim.tar.gz"           -C "$DIST" nvim && rm -rf "$DIST/nvim"
 tar czf "$DIST/lazyvim-config.tar.gz" -C "$HOME/.config" nvim
 tar czf "$DIST/lazyvim-data.tar.gz"   -C "$HOME/.local/share" nvim
 ( cd "$DIST/fonts" && tar czf "$DIST/fonts.tar.gz" ./*.ttf ) && rm -rf "$DIST/fonts"
+( cd "$DIST/parsers" && tar czf "$DIST/parsers.tar.gz" ./*.so ) 2>/dev/null && rm -rf "$DIST/parsers"
 ls -lh "$DIST"
 log "ГОТОВО"
