@@ -4,7 +4,7 @@
 # Монтируется: /nvim (nvim), /reg/parsers.lua, /gen.lua. Запуск в debian:buster-slim.
 set -uo pipefail
 export DEBIAN_FRONTEND=noninteractive
-TS_LANGS="${TS_LANGS:-c cpp rust lua luadoc vim vimdoc query markdown markdown_inline bash json yaml toml regex printf gitcommit diff}"
+TS_LANGS="${TS_LANGS:-c cpp cmake rust lua luadoc vim vimdoc query markdown markdown_inline bash json yaml toml regex printf gitcommit diff}"
 log(){ printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 
 log "apt: gcc/g++/git"

@@ -10,7 +10,7 @@ export PATH="$HOME/.cargo/bin:$HOME/.local/bin:/opt/cmake/bin:$PATH"
 NVIM_TAG="${NVIM_TAG:-v0.12.4}"
 CMAKE_VER="${CMAKE_VER:-3.28.3}"
 FONT="${FONT:-JetBrainsMono}"
-TS_LANGS="${TS_LANGS:-c cpp rust lua luadoc vim vimdoc query markdown markdown_inline bash json yaml toml regex printf gitcommit diff}"
+TS_LANGS="${TS_LANGS:-c cpp cmake rust lua luadoc vim vimdoc query markdown markdown_inline bash json yaml toml regex printf gitcommit diff}"
 
 DIST=/out
 mkdir -p "$DIST/bin" "$DIST/fonts" "$DIST/parsers"
