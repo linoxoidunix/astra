@@ -133,6 +133,40 @@ cargo build --offline          # tokio = { version = "1.47", features = ["full"]
 `build-registry.sh` принимает несколько наборов (каталоги и/или `.tar.gz`), считает
 дубли и конфликты версий.
 
+## Разворачивание на Astra (всё по порядку)
+
+Репозиторий вместе с `dist/` уже перенесён на Astra (см. п.1–2). Дальше — одна
+последовательность от начала до рабочего окружения:
+
+```bash
+cd astra    # каталог с репозиторием и dist/
+
+# 1) Neovim + LazyVim + плагины + rust-analyzer + парсеры + шрифт
+bash install/install.sh                 # для текущего пользователя ($HOME)
+#   или на всю машину:  sudo bash install/install-system.sh
+
+# 2) C++ LSP (clangd) — версия своя на каждой машине
+apt-cache search clangd                 # посмотреть доступную
+sudo apt install -y clangd-15           # подставить найденную версию
+sudo ln -sf "$(command -v clangd-15 || command -v clangd)" /usr/local/bin/clangd
+
+# 3) Rust-тулчейн + системные крейты librust-*-dev
+bash install/install-rust.sh popular    # all | popular | none
+
+# 4) Внешние крейты (tokio и пр.) → объединённый офлайн-реестр cargo.
+#    cargo-vendor-win.tar.gz уже в dist/ (приехал с бандлом), исходники — в cargo/vendor/
+sudo bash install/build-registry.sh cargo/vendor dist/cargo-vendor-win.tar.gz
+cp /opt/astra-dev/cargo-registry.config.toml ~/.cargo/config.toml
+
+# 5) открыть НОВЫЙ терминал (обновится PATH), выбрать шрифт
+#    "JetBrainsMono Nerd Font Mono", запустить:
+nvim
+```
+
+Что нужно от sudo: п.2 (clangd), п.3 (`apt`), п.4 (`/opt`). Пункты 1 и итоговый
+`nvim` — без прав root. При установке `install-system.sh` config+плагины LazyVim
+засеются каждому пользователю при первом запуске `nvim`.
+
 ## Проверка
 ```bash
 nvim --version
