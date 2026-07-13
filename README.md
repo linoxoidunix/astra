@@ -101,30 +101,37 @@ bash install/install-rust.sh none       # только тулчейн, без к
 ### 5. Крейты, которых нет в `librust-*-dev` (напр. tokio) — офлайн
 
 Часть крейтов (например `tokio`) в репозиториях Astra отсутствует. Их исходники
-вендорятся на машине с интернетом и раздаются офлайн, а на Astra **сливаются с
-debian-реестром в один объединённый** cargo-реестр — проект видит крейты из обоих.
+вендорятся и раздаются офлайн, а на Astra **сливаются с debian-реестром в один
+объединённый** cargo-реестр — проект видит крейты из обоих.
 
-**Собрать набор** (на машине с интернетом, нужен `cargo`/rustup):
+Раскладка **раздельная**:
+- **исходники** крейтов → `cargo/vendor/` (в git, ~25 МБ чистого текста);
+- бинарные **`windows-*`** крейты → `dist/cargo-vendor-win.tar.gz` (в Release).
+  Их нельзя выкинуть — cargo требует их и на Linux (cfg-зависимости), но это
+  import-либы `.a`/`.lib`, поэтому едут не в git, а в Release.
+
+**Пересобрать набор** (на машине с интернетом, нужен `cargo`/rustup):
 ```bash
-./build/build-vendor.sh                  # набор по умолчанию: tokio/full → dist/cargo-vendor.tar.gz
-./build/build-vendor.sh tokio/full serde/derive     # свой список <crate>/<features>
+./build/build-vendor.sh                            # tokio/full
+./build/build-vendor.sh tokio/full serde/derive    # свой список <crate>/<features>
 ```
-Версии подбираются под MSRV Astra (`RUST_VERSION`, по умолчанию `1.70`) — резолвер
-не возьмёт крейт, требующий более новый `rustc`. `cargo-vendor.tar.gz` кладётся в
-`dist/` и выкладывается в Release рядом с прочими ассетами.
+Обновит `cargo/vendor/` (закоммить) и `dist/cargo-vendor-win.tar.gz` (в Release).
+Версии — под MSRV Astra (`RUST_VERSION`, по умолчанию `1.70`).
 
-**Развернуть на Astra** (объединить с debian-реестром):
+**Развернуть на Astra:**
 ```bash
-sudo bash install/build-registry.sh dist/cargo-vendor.tar.gz
+# исходники приезжают с git clone (cargo/vendor/); windows-часть — из Release:
+gh release download v0.1.0 --repo <you>/<repo> -p 'cargo-vendor-win.tar.gz' -D dist/
+# слить обе части + debian-реестр в объединённый реестр:
+sudo bash install/build-registry.sh cargo/vendor dist/cargo-vendor-win.tar.gz
 cp /opt/astra-dev/cargo-registry.config.toml ~/.cargo/config.toml
 ```
 После этого в проекте:
 ```bash
 cargo build --offline          # tokio = { version = "1.47", features = ["full"] }
 ```
-`build-registry.sh` принимает и несколько наборов сразу (каталоги или `.tar.gz`),
-считает дубли/конфликты версий. Обновление набора — пересобрать `build-vendor.sh`
-и заново прогнать `build-registry.sh`.
+`build-registry.sh` принимает несколько наборов (каталоги и/или `.tar.gz`), считает
+дубли и конфликты версий.
 
 ## Проверка
 ```bash

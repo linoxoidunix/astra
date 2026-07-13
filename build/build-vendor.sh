@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# build-vendor.sh — собирает офлайн-набор внешних крейтов (которых НЕТ в
-# librust-*-dev Astra) в dist/cargo-vendor.tar.gz. На машине с интернетом.
+# build-vendor.sh — вендорит внешние крейты (которых НЕТ в librust-*-dev Astra)
+# и раскладывает их РАЗДЕЛЬНО:
+#   - исходники        → cargo/vendor/            (коммитятся в git)
+#   - бинарные windows-* → dist/cargo-vendor-win.tar.gz (в GitHub Release)
+# cargo требует windows-крейты в vendor даже на Linux (cfg-зависимости), но они
+# бинарные (import-либы .a/.lib) — в git им не место, поэтому едут в Release.
+# На Astra обе части сливаются install/build-registry.sh в объединённый реестр.
 #
-#   ./build/build-vendor.sh                         # набор по умолчанию: tokio/full
-#   ./build/build-vendor.sh tokio/full serde/derive reqwest
+#   ./build/build-vendor.sh                       # набор по умолчанию: tokio/full
+#   ./build/build-vendor.sh tokio/full serde/derive
 #
-# Аргумент: <crate> либо <crate>/<feature,feature>.
-# Версии подбираются под MSRV целевой Astra: RUST_VERSION (по умолчанию 1.70) —
-# резолвер не возьмёт крейт, требующий более новый rustc.
-#
-# Результат кладётся рядом с прочими артефактами в dist/ и выкладывается в
-# GitHub Release (см. README). На Astra разворачивается install/build-registry.sh.
+# Версии подбираются под MSRV Astra: RUST_VERSION (по умолчанию 1.70).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -52,7 +52,21 @@ echo "==> Подбор версий под rustc $RUST_VERSION и загрузк
   cargo generate-lockfile
   cargo vendor vendor >/dev/null )
 
-echo "==> Упаковка dist/cargo-vendor.tar.gz"
-tar czf "$DIST/cargo-vendor.tar.gz" -C "$WORK" vendor Cargo.toml Cargo.lock
-ls -lh "$DIST/cargo-vendor.tar.gz"
-echo "крейтов в наборе: $(find "$WORK/vendor" -maxdepth 1 -mindepth 1 | wc -l)"
+echo "==> Раскладка: исходники → cargo/vendor/, windows-* → dist/cargo-vendor-win.tar.gz"
+rm -rf "$ROOT/cargo/vendor"; mkdir -p "$ROOT/cargo/vendor"
+WINSTAGE="$WORK/win/vendor"; mkdir -p "$WINSTAGE"
+for d in "$WORK/vendor"/*/; do
+  n="$(basename "$d")"
+  case "$n" in
+    windows*|winapi*) mv "$d" "$WINSTAGE/$n" ;;
+    *)                mv "$d" "$ROOT/cargo/vendor/$n" ;;
+  esac
+done
+cp "$WORK/Cargo.lock" "$ROOT/cargo/vendor.lock"
+tar czf "$DIST/cargo-vendor-win.tar.gz" -C "$WORK/win" vendor
+
+echo
+echo "Исходники (в git):   cargo/vendor/  — $(find "$ROOT/cargo/vendor" -maxdepth 1 -mindepth 1|wc -l) крейтов, $(du -sh "$ROOT/cargo/vendor"|cut -f1)"
+echo "Windows (в Release): dist/cargo-vendor-win.tar.gz — $(du -h "$DIST/cargo-vendor-win.tar.gz"|cut -f1)"
+echo
+echo "Дальше: закоммить cargo/vendor + cargo/vendor.lock; залей dist/cargo-vendor-win.tar.gz в Release."
