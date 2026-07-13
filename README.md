@@ -14,8 +14,10 @@
 | treesitter-парсеры (rust/cpp/c/cmake/…) | компилятся из грамматик под 2.28 |
 | JetBrainsMono Nerd Font | из nerd-fonts |
 | офлайн-конфиг cargo | крейты из `librust-*-dev` |
+| крейты не из Astra (tokio…) | вендор + объединённый реестр (`build-vendor.sh` / `build-registry.sh`) |
 
-**C++ LSP (clangd)** ставится штатным `apt` на самой Astra (`clangd-19` есть в репозитории).
+**C++ LSP (clangd)** ставится штатным `apt` на самой Astra. Версия зависит от машины
+(напр. `clangd-15`) — доступную ищи через `apt-cache search clangd`.
 
 ## Использование
 
@@ -79,7 +81,11 @@ sudo bash install/install-system.sh
 ```
 
 Затем руками (см. вывод скрипта):
-- `sudo apt install -y clangd-19 && sudo ln -sf "$(command -v clangd-19)" /usr/local/bin/clangd`
+- C++ LSP (версия зависит от машины — сперва `apt-cache search clangd`):
+  ```bash
+  sudo apt install -y clangd-15    # подставь найденную версию
+  sudo ln -sf "$(command -v clangd-15 || command -v clangd)" /usr/local/bin/clangd
+  ```
 - в терминале выбрать шрифт **JetBrainsMono Nerd Font Mono**
 - открыть новый терминал → `nvim`
 
@@ -91,6 +97,34 @@ bash install/install-rust.sh            # тулчейн + ВСЕ librust-*-dev
 bash install/install-rust.sh popular    # типовой набор крейтов
 bash install/install-rust.sh none       # только тулчейн, без крейтов
 ```
+
+### 5. Крейты, которых нет в `librust-*-dev` (напр. tokio) — офлайн
+
+Часть крейтов (например `tokio`) в репозиториях Astra отсутствует. Их исходники
+вендорятся на машине с интернетом и раздаются офлайн, а на Astra **сливаются с
+debian-реестром в один объединённый** cargo-реестр — проект видит крейты из обоих.
+
+**Собрать набор** (на машине с интернетом, нужен `cargo`/rustup):
+```bash
+./build/build-vendor.sh                  # набор по умолчанию: tokio/full → dist/cargo-vendor.tar.gz
+./build/build-vendor.sh tokio/full serde/derive     # свой список <crate>/<features>
+```
+Версии подбираются под MSRV Astra (`RUST_VERSION`, по умолчанию `1.70`) — резолвер
+не возьмёт крейт, требующий более новый `rustc`. `cargo-vendor.tar.gz` кладётся в
+`dist/` и выкладывается в Release рядом с прочими ассетами.
+
+**Развернуть на Astra** (объединить с debian-реестром):
+```bash
+sudo bash install/build-registry.sh dist/cargo-vendor.tar.gz
+cp /opt/astra-dev/cargo-registry.config.toml ~/.cargo/config.toml
+```
+После этого в проекте:
+```bash
+cargo build --offline          # tokio = { version = "1.47", features = ["full"] }
+```
+`build-registry.sh` принимает и несколько наборов сразу (каталоги или `.tar.gz`),
+считает дубли/конфликты версий. Обновление набора — пересобрать `build-vendor.sh`
+и заново прогнать `build-registry.sh`.
 
 ## Проверка
 ```bash
@@ -106,3 +140,6 @@ nvim file.cpp                          # clangd подцепится
 - podman: контейнер запускается с `--network=host` (иначе из NAT-контейнера не виден
   прокси), ro-монтирования — с меткой `:z`/`:Z` (SELinux на Fedora).
 - Rust-проекты собираются офлайн из `librust-*-dev` через `~/.cargo/config.toml`.
+- Крейты, которых нет в `librust-*-dev` (tokio и т.п.), вендорятся исходниками и
+  сливаются с debian-реестром в один directory-source (`install/build-registry.sh`).
+  Пруним `windows-*` из vendor **нельзя** — cargo требует их и на Linux (cfg-зависимости).

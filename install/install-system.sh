@@ -104,8 +104,9 @@ cat <<EOF
     cargo-конфиг — при следующем входе в систему.
 
 Осталось руками (sudo, один раз на машину):
-  1) C++ LSP:
-       sudo apt install -y clangd-19 && sudo ln -sf "\$(command -v clangd-19)" /usr/local/bin/clangd
+  1) C++ LSP (версия clangd зависит от машины — сперва:  apt-cache search clangd):
+       sudo apt install -y clangd-15    # подставь найденную версию
+       sudo ln -sf "\$(command -v clangd-15 || command -v clangd)" /usr/local/bin/clangd
   2) Rust-тулчейн из репозиториев Astra (для cargo/rustc):
        bash install/install-rust.sh
   3) В терминале выбрать шрифт "JetBrainsMono Nerd Font Mono".

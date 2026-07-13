@@ -43,8 +43,10 @@ grep -q '.local/bin' ~/.bashrc 2>/dev/null || echo 'export PATH="$HOME/.local/bi
 cat <<'EOF'
 
 ==> Пользовательская часть установлена. Осталось руками:
-  1) C++ LSP (нужен sudo):
-       sudo apt install -y clangd-19 && sudo ln -sf "$(command -v clangd-19)" /usr/local/bin/clangd
+  1) C++ LSP (нужен sudo). Версия clangd в репозитории зависит от машины —
+     сперва найди доступную:  apt-cache search clangd
+       sudo apt install -y clangd-15    # подставь найденную версию
+       sudo ln -sf "$(command -v clangd-15 || command -v clangd)" /usr/local/bin/clangd
   2) Шрифт терминала: выбрать "JetBrainsMono Nerd Font Mono"
      (иначе иконки LazyVim показываются как "?").
   3) Открыть НОВЫЙ терминал (обновится PATH) и запустить:  nvim
