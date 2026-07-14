@@ -170,6 +170,42 @@ nvim
 `nvim` — без прав root. При установке `install-system.sh` config+плагины LazyVim
 засеются каждому пользователю при первом запуске `nvim`.
 
+## Обновление уже установленной машины (точечно)
+
+Если комплект уже стоит и надо доставить/обновить только часть (например добавить
+JS/TS), НЕ гоняй установку с нуля. `install/install.sh` — деструктивный полный
+установщик (стирает и перезаписывает `~/.config/nvim` и данные nvim). Вместо него
+качай из Release только изменившиеся ассеты и раскладывай точечно.
+
+**На машине с интернетом** — обновить репозиторий и скачать нужные ассеты в `dist/`:
+```bash
+cd astra && git pull
+gh release download v0.1.0 --repo linoxoidunix/astra --clobber -D dist/ \
+  -p 'node.tar.gz' -p 'ts-lsp.tar.gz' \
+  -p 'lazyvim-config.tar.gz' -p 'lazyvim-data.tar.gz' -p 'parsers.tar.gz'
+```
+(набор `-p` — то, что реально поменялось; для JS/TS это эти пять). Перенести `astra/`
+на целевую машину.
+
+**На целевой машине** — два шага:
+```bash
+cd ~/astra
+
+# 1) бинарники Node + vtsls (инкрементально, ничего не сносит)
+bash install/install-ts.sh              # или: sudo bash install/install-ts.sh system
+
+# 2) редакторная часть LazyVim: config + плагины + парсеры.
+#    ВНИМАНИЕ: перезаписывает ~/.config/nvim (правил руками — сделай бэкап).
+rm -rf ~/.config/nvim ~/.local/share/nvim ~/.local/state/nvim ~/.cache/nvim
+tar xzf dist/lazyvim-config.tar.gz -C ~/.config
+tar xzf dist/lazyvim-data.tar.gz   -C ~/.local/share
+mkdir -p ~/.config/nvim/parser && tar xzf dist/parsers.tar.gz -C ~/.config/nvim/parser
+```
+`install-ts.sh` сам по себе ставит **только** Node + vtsls; редакторная интеграция
+(typescript-extra в конфиге, плагины, парсеры js/ts) — это шаг 2. Не трогаются
+`nvim`-бинарь, `rust-analyzer`, шрифты, clangd, Rust-тулчейн и cargo-реестр —
+их повторять не нужно.
+
 ## Проверка
 ```bash
 nvim --version
