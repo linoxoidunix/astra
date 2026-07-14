@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+f#!/usr/bin/env bash
 # install-system.sh — системная (для ВСЕХ пользователей) установка комплекта
 # на Astra (офлайн, glibc 2.28).
 #
@@ -49,6 +49,21 @@ fi
 # --- rust-analyzer → /usr/local/bin ----------------------------------------
 say "rust-analyzer → /usr/local/bin"
 install -m755 "$DIST/bin/rust-analyzer" /usr/local/bin/rust-analyzer
+
+# --- Node.js + TS/JS LSP (vtsls) → /opt/astra-dev + /usr/local/bin ----------
+if [ -f "$DIST/node.tar.gz" ]; then
+    say "Node.js → $PREFIX/node (для TS/JS LSP, общий для всех)"
+    rm -rf "$PREFIX/node"
+    tar xzf "$DIST/node.tar.gz" -C "$PREFIX"
+    ln -sf "$PREFIX/node/bin/node" /usr/local/bin/node
+    ln -sf "$PREFIX/node/bin/npm"  /usr/local/bin/npm
+fi
+if [ -f "$DIST/ts-lsp.tar.gz" ]; then
+    say "TS/JS LSP (vtsls) → $PREFIX/ts-lsp"
+    rm -rf "$PREFIX/ts-lsp"
+    tar xzf "$DIST/ts-lsp.tar.gz" -C "$PREFIX"
+    ln -sf "$PREFIX/ts-lsp/bin/vtsls" /usr/local/bin/vtsls
+fi
 
 # --- nvim: wrapper в /usr/local/bin, засевающий домашку при первом запуске ---
 say "nvim wrapper → /usr/local/bin/nvim (засев config+плагинов на пользователя)"

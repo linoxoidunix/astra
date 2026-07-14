@@ -10,7 +10,9 @@ export PATH="$HOME/.cargo/bin:$HOME/.local/bin:/opt/cmake/bin:$PATH"
 NVIM_TAG="${NVIM_TAG:-v0.12.4}"
 CMAKE_VER="${CMAKE_VER:-3.28.3}"
 FONT="${FONT:-JetBrainsMono}"
-TS_LANGS="${TS_LANGS:-c cpp cmake rust lua luadoc vim vimdoc query markdown markdown_inline bash json yaml toml regex printf gitcommit diff}"
+NODE_VER="${NODE_VER:-v20.18.1}"     # LTS, собран под glibc 2.28 (идёт на Astra 1.7)
+TS_VER="${TS_VER:-5.7.3}"            # typescript 5.x — стабильный tsserver для vtsls
+TS_LANGS="${TS_LANGS:-c cpp cmake rust lua luadoc vim vimdoc query markdown markdown_inline bash json yaml toml regex printf gitcommit diff javascript typescript tsx jsdoc html css}"
 
 DIST=/out
 mkdir -p "$DIST/bin" "$DIST/fonts" "$DIST/parsers"
@@ -54,6 +56,19 @@ git clone --depth 1 https://github.com/rust-lang/rust-analyzer /ra
 cp /ra/target/release/rust-analyzer "$DIST/bin/rust-analyzer"
 "$DIST/bin/rust-analyzer" --version
 
+# ---------------------------------------------------------------- Node + TS LSP
+log "Node ${NODE_VER} (для TS/JS LSP) + vtsls + typescript"
+curl -fsSL -o /tmp/node.tar.xz \
+  "https://nodejs.org/dist/${NODE_VER}/node-${NODE_VER}-linux-x64.tar.xz"
+rm -rf "$DIST/node"; mkdir -p "$DIST/node"
+tar xf /tmp/node.tar.xz -C "$DIST/node" --strip-components=1
+export PATH="$DIST/node/bin:$PATH"
+node --version
+# vtsls + фиксированный typescript 5.x (стабильный tsserver.js, который ждёт vtsls)
+rm -rf "$DIST/ts-lsp"
+npm install -g --prefix "$DIST/ts-lsp" @vtsls/language-server "typescript@${TS_VER}"
+"$DIST/ts-lsp/bin/vtsls" --version
+
 # ---------------------------------------------------------------- LazyVim
 log "LazyVim starter + расширения"
 rm -rf "$HOME/.config/nvim" "$HOME/.local/share/nvim" "$HOME/.local/state/nvim" "$HOME/.cache/nvim"
@@ -65,9 +80,13 @@ return {
   { import = "lazyvim.plugins.extras.lang.rust" },
   { import = "lazyvim.plugins.extras.lang.clangd" },
   { import = "lazyvim.plugins.extras.lang.cmake" },
+  { import = "lazyvim.plugins.extras.lang.typescript" },
   -- офлайн: mason ничего не доустанавливает, LSP берём из PATH
   { "mason.nvim", opts = { ensure_installed = {} } },
-  { "nvim-lspconfig", opts = { servers = { clangd = { mason = false } } } },
+  { "nvim-lspconfig", opts = { servers = {
+    clangd = { mason = false },
+    vtsls  = { mason = false },   -- TS/JS сервер (bundled Node) из PATH
+  } } },
 }
 LUA
 
@@ -113,6 +132,8 @@ echo "шрифтов: $(ls "$DIST/fonts" | wc -l)"
 # ---------------------------------------------------------------- упаковка
 log "Упаковка dist"
 tar czf "$DIST/nvim.tar.gz"           -C "$DIST" nvim && rm -rf "$DIST/nvim"
+tar czf "$DIST/node.tar.gz"           -C "$DIST" node && rm -rf "$DIST/node"
+tar czf "$DIST/ts-lsp.tar.gz"         -C "$DIST" ts-lsp && rm -rf "$DIST/ts-lsp"
 tar czf "$DIST/lazyvim-config.tar.gz" -C "$HOME/.config" nvim
 tar czf "$DIST/lazyvim-data.tar.gz"   -C "$HOME/.local/share" nvim
 ( cd "$DIST/fonts" && tar czf "$DIST/fonts.tar.gz" ./*.ttf ) && rm -rf "$DIST/fonts"

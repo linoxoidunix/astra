@@ -24,6 +24,20 @@ tar xzf "$DIST/lazyvim-data.tar.gz"   -C ~/.local/share
 say "rust-analyzer → ~/.local/bin"
 install -m755 "$DIST/bin/rust-analyzer" ~/.local/bin/rust-analyzer
 
+if [ -f "$DIST/node.tar.gz" ]; then
+    say "Node.js → ~/.local/node (для TS/JS LSP)"
+    rm -rf ~/.local/node
+    tar xzf "$DIST/node.tar.gz" -C ~/.local
+    ln -sf ~/.local/node/bin/node ~/.local/bin/node
+    ln -sf ~/.local/node/bin/npm  ~/.local/bin/npm
+fi
+if [ -f "$DIST/ts-lsp.tar.gz" ]; then
+    say "TS/JS LSP (vtsls) → ~/.local/ts-lsp"
+    rm -rf ~/.local/ts-lsp
+    tar xzf "$DIST/ts-lsp.tar.gz" -C ~/.local
+    ln -sf ~/.local/ts-lsp/bin/vtsls ~/.local/bin/vtsls
+fi
+
 if [ -f "$DIST/parsers.tar.gz" ]; then
     say "treesitter-парсеры → ~/.config/nvim/parser"
     mkdir -p ~/.config/nvim/parser

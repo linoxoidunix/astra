@@ -9,9 +9,10 @@
 | Компонент | Как |
 |---|---|
 | Neovim (последний) | собирается под glibc 2.28 |
-| LazyVim + плагины (rust, clangd, cmake) | клон на этапе сборки |
+| LazyVim + плагины (rust, clangd, cmake, typescript) | клон на этапе сборки |
 | rust-analyzer (Rust LSP) | собирается из исходников |
-| treesitter-парсеры (rust/cpp/c/cmake/…) | компилятся из грамматик под 2.28 |
+| Node.js 20 + vtsls (TS/JS LSP) | Node LTS под glibc 2.28 + `npm i` vtsls/typescript |
+| treesitter-парсеры (rust/cpp/c/cmake/js/ts/tsx/…) | компилятся из грамматик под 2.28 |
 | JetBrainsMono Nerd Font | из nerd-fonts |
 | офлайн-конфиг cargo | крейты из `librust-*-dev` |
 | крейты не из Astra (tokio…) | вендор + объединённый реестр (`build-vendor.sh` / `build-registry.sh`) |
@@ -32,6 +33,8 @@ GitHub Release** (готовое, ничего собирать не надо), 
 astra/
 └── dist/
     ├── nvim.tar.gz
+    ├── node.tar.gz            # Node.js 20 (для TS/JS LSP)
+    ├── ts-lsp.tar.gz          # vtsls + typescript
     ├── lazyvim-config.tar.gz
     ├── lazyvim-data.tar.gz
     ├── fonts.tar.gz
@@ -173,6 +176,8 @@ nvim --version
 rust-analyzer --version
 cd <rust-проект> && nvim src/main.rs   # rust-analyzer подцепится
 nvim file.cpp                          # clangd подцепится
+node --version                         # bundled Node 20
+nvim file.ts                           # vtsls подцепится (:LspInfo → vtsls)
 ```
 
 ## Заметки
