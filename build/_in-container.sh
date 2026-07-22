@@ -84,6 +84,7 @@ return {
   -- офлайн: mason ничего не доустанавливает, LSP берём из PATH
   { "mason.nvim", opts = { ensure_installed = {} } },
   { "nvim-lspconfig", opts = { servers = {
+    rust_analyzer = { mason = false },  -- собранный бинарь (dist/bin) из PATH
     clangd = { mason = false },
     vtsls  = { mason = false },   -- TS/JS сервер (bundled Node) из PATH
   } } },
