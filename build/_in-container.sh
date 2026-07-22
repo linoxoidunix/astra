@@ -81,6 +81,7 @@ return {
   { import = "lazyvim.plugins.extras.lang.clangd" },
   { import = "lazyvim.plugins.extras.lang.cmake" },
   { import = "lazyvim.plugins.extras.lang.typescript" },
+  { import = "lazyvim.plugins.extras.coding.neogen" },  -- Doxygen/rustdoc/JSDoc аннотации: <leader>cn
   -- офлайн: mason ничего не доустанавливает, LSP берём из PATH
   { "mason.nvim", opts = { ensure_installed = {} } },
   { "nvim-lspconfig", opts = { servers = {
