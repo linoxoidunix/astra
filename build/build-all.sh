@@ -19,4 +19,7 @@ exec "$ENGINE" run --rm $NET \
     -v "$HERE/_in-container.sh":/build.sh:ro,z \
     -v "$DIST":/out:Z \
     -e NVIM_TAG="${NVIM_TAG:-v0.12.4}" \
+    -e RUST_VER="${RUST_VER:-1.70.0}" \
+    -e RA_TAG="${RA_TAG:-2023-11-27}" \
+    -e RA_JOBS="${RA_JOBS:-2}" \
     debian:buster-slim bash /build.sh

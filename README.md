@@ -27,7 +27,7 @@
 Установщики читают собранный бандл из каталога `dist/`. Его либо **скачиваешь из
 GitHub Release** (готовое, ничего собирать не надо), либо **собираешь сам**.
 
-Раскладка, которую ждут скрипты (5 архивов — в `dist/`, `rust-analyzer` — в `dist/bin/`):
+Раскладка, которую ждут скрипты (5 архивов — в `dist/`, бинарники — в `dist/bin/`):
 
 ```
 astra/
@@ -40,7 +40,9 @@ astra/
     ├── fonts.tar.gz
     ├── parsers.tar.gz
     └── bin/
-        └── rust-analyzer
+        ├── rust-analyzer
+        ├── rg                 # ripgrep — греп в пикере (<leader>sg/sG)
+        └── fd                 # поиск файлов в пикере (<leader>ff)
 ```
 
 **Вариант A — скачать из Release** (на машине с интернетом):
@@ -205,6 +207,82 @@ mkdir -p ~/.config/nvim/parser && tar xzf dist/parsers.tar.gz -C ~/.config/nvim/
 (typescript-extra в конфиге, плагины, парсеры js/ts) — это шаг 2. Не трогаются
 `nvim`-бинарь, `rust-analyzer`, шрифты, clangd, Rust-тулчейн и cargo-реестр —
 их повторять не нужно.
+
+### ripgrep + fd (греп и поиск файлов в пикере)
+
+Если в пикере греп падает с `Failed to spawn rg` — на машине нет `rg`. Это признак
+бандла, собранного до появления шага с ripgrep/fd. Пересобирать весь `dist/` не надо:
+это готовые static-musl бинарники, они не зависят от glibc и никак не связаны с
+контейнерной сборкой.
+
+**На машине с интернетом** — положить их в `dist/bin/`:
+```bash
+curl -fsSL https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-musl.tar.gz \
+  | tar xz -O --wildcards '*/rg' > dist/bin/rg
+curl -fsSL https://github.com/sharkdp/fd/releases/download/v10.2.0/fd-v10.2.0-x86_64-unknown-linux-musl.tar.gz \
+  | tar xz -O --wildcards '*/fd' > dist/bin/fd
+chmod +x dist/bin/rg dist/bin/fd
+```
+Перенести `astra/` на целевую машину (или просто скопировать туда эти два файла).
+
+**На целевой машине:**
+```bash
+bash install/install-tools.sh              # или: sudo bash install/install-tools.sh system
+```
+Скрипт инкрементальный — кладёт `rg` и `fd` в `~/.local/bin` (или `/usr/local/bin`
+в режиме `system`) и больше ничего не трогает. Если каталог уже был в `PATH`
+запущенного nvim, греп заработает без перезапуска (он спавнит `rg` заново на каждый
+ввод); если `PATH` дописывался в `~/.bashrc` только что — нужен новый терминал.
+
+### Правка конфига LazyVim для всех пользователей
+
+Конфиг у каждого пользователя **свой** (`~/.config/nvim`): `install-system.sh` держит
+эталон в `/opt/astra-dev/skel`, а wrapper `/usr/local/bin/nvim` копирует его в `$HOME`
+при **первом** запуске nvim. Отсюда три разных случая для любой правки конфига.
+
+**1. Машина ставится с нуля** — ничего делать не надо, правка должна быть в
+`build/_in-container.sh` (там генерится `lua/plugins/*.lua`) и приедет в
+`lazyvim-config.tar.gz`.
+
+**2. Система уже стоит, но пользователи ещё не запускали nvim** — дописать в seed:
+```bash
+sudo tee /opt/astra-dev/skel/.config/nvim/lua/plugins/explorer-grep.lua >/dev/null <<'LUA'
+return {
+  {
+    "folke/snacks.nvim",
+    opts = { picker = { sources = { explorer = { win = { list = { keys = {
+      ["<leader>sG"] = "picker_grep",
+    } } } } } } },
+  },
+}
+LUA
+```
+
+**3. У пользователей `~/.config/nvim` уже создан** — полный seed им больше не
+копируется (wrapper проверяет `[ ! -e "$HOME/.config/nvim" ]`, и это правильно:
+иначе затирались бы их собственные правки). Но спеки комплекта доезжают:
+
+> Файлы `lua/plugins/astra-*.lua` — **управляемые**. Wrapper при каждом запуске
+> сверяет их с эталоном в skel по содержимому и обновляет, если разошлись.
+> Всё остальное в `lua/plugins` — личное пользователя, не трогается никогда.
+
+То есть достаточно положить новый спек в skel — он разъедется по всем при следующем
+запуске nvim:
+```bash
+sudo cp dist-распакованный/lua/plugins/astra-explorer-grep.lua \
+        /opt/astra-dev/skel/.config/nvim/lua/plugins/
+```
+Обратная сторона: если пользователь отредактирует `astra-*.lua`, правку откатит.
+Свои настройки он должен класть в файл с любым другим именем — там его никто не
+тронет, а лишний спек в `lua/plugins` LazyVim просто домержит.
+
+Сравнение идёт по содержимому, а не по времени: `tar` восстанавливает в skel mtime
+из архива, поэтому свежий спек запросто оказывается «старее» копии в домашке, и
+проверка по mtime (`cp -u`) молча ничего бы не делала.
+
+Правку конфига **нельзя** протолкнуть через общий runtimepath или `/etc/xdg/nvim`:
+lazy.nvim сбрасывает runtimepath на старте, системных каталогов там нет. Поэтому
+единственный путь — эталон в skel плюс синхронизация в домашки.
 
 ## Проверка
 ```bash

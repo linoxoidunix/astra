@@ -1,4 +1,4 @@
-f#!/usr/bin/env bash
+#!/usr/bin/env bash
 # install-system.sh — системная (для ВСЕХ пользователей) установка комплекта
 # на Astra (офлайн, glibc 2.28).
 #
@@ -50,6 +50,13 @@ fi
 say "rust-analyzer → /usr/local/bin"
 install -m755 "$DIST/bin/rust-analyzer" /usr/local/bin/rust-analyzer
 
+# --- ripgrep + fd → /usr/local/bin -----------------------------------------
+# rg нужен грепу пикера (<leader>sg/sG), fd — поиску файлов (<leader>ff).
+# Без rg греп падает с "Failed to spawn rg".
+for tool in rg fd; do
+    [ -f "$DIST/bin/$tool" ] && { say "$tool → /usr/local/bin"; install -m755 "$DIST/bin/$tool" /usr/local/bin/$tool; }
+done
+
 # --- Node.js + TS/JS LSP (vtsls) → /opt/astra-dev + /usr/local/bin ----------
 if [ -f "$DIST/node.tar.gz" ]; then
     say "Node.js → $PREFIX/node (для TS/JS LSP, общий для всех)"
@@ -77,6 +84,18 @@ if [ ! -e "\$HOME/.config/nvim" ] && [ -d "\$SKEL/.config/nvim" ]; then
     mkdir -p "\$HOME/.config" "\$HOME/.local/share"
     cp -a "\$SKEL/.config/nvim"       "\$HOME/.config/nvim"
     cp -a "\$SKEL/.local/share/nvim"  "\$HOME/.local/share/nvim"
+fi
+# Спеки комплекта (lua/plugins/astra-*.lua) — управляемые: подтягиваются при КАЖДОМ
+# запуске, поэтому правка в skel доезжает и до тех, кто nvim уже запускал.
+# Всё остальное в lua/plugins — личное пользователя, не трогаем.
+# Сравниваем по СОДЕРЖИМОМУ, а не по времени: tar восстанавливает в skel mtime из
+# архива, и свежий спек запросто оказывается "старее" копии в домашке.
+if [ -d "\$HOME/.config/nvim/lua/plugins" ]; then
+    for f in "\$SKEL"/.config/nvim/lua/plugins/astra-*.lua; do
+        [ -e "\$f" ] || continue
+        d="\$HOME/.config/nvim/lua/plugins/\${f##*/}"
+        cmp -s "\$f" "\$d" 2>/dev/null || cp -f "\$f" "\$d" 2>/dev/null || true
+    done
 fi
 exec "\$NVIM_REAL" "\$@"
 EOF

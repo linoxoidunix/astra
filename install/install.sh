@@ -24,6 +24,10 @@ tar xzf "$DIST/lazyvim-data.tar.gz"   -C ~/.local/share
 say "rust-analyzer → ~/.local/bin"
 install -m755 "$DIST/bin/rust-analyzer" ~/.local/bin/rust-analyzer
 
+for tool in rg fd; do   # ripgrep (<leader>sg/sG греп) и fd (<leader>ff поиск файлов)
+    [ -f "$DIST/bin/$tool" ] && { install -m755 "$DIST/bin/$tool" ~/.local/bin/$tool; say "$tool → ~/.local/bin"; }
+done
+
 if [ -f "$DIST/node.tar.gz" ]; then
     say "Node.js → ~/.local/node (для TS/JS LSP)"
     rm -rf ~/.local/node

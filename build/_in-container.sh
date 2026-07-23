@@ -12,6 +12,11 @@ CMAKE_VER="${CMAKE_VER:-3.28.3}"
 FONT="${FONT:-JetBrainsMono}"
 NODE_VER="${NODE_VER:-v20.18.1}"     # LTS, собран под glibc 2.28 (идёт на Astra 1.7)
 TS_VER="${TS_VER:-5.7.3}"            # typescript 5.x — стабильный tsserver для vtsls
+RUST_VER="${RUST_VER:-1.70.0}"       # тулчейн для сборки rust-analyzer
+RA_TAG="${RA_TAG:-2023-11-27}"       # последний релиз rust-analyzer, реально собирающийся на 1.70 (2024-01-01 врёт про MSRV — E0445)
+RA_JOBS="${RA_JOBS:-2}"              # параллельных задач cargo: меньше = меньше пик ОЗУ (LLVM codegen)
+RG_VER="${RG_VER:-14.1.1}"          # ripgrep для LazyVim-грепа (<leader>sg/sG); static-musl, без glibc
+FD_VER="${FD_VER:-10.2.0}"          # fd для файлового пикера (<leader>ff); static-musl, без glibc
 TS_LANGS="${TS_LANGS:-c cpp cmake rust lua luadoc vim vimdoc query markdown markdown_inline bash json yaml toml regex printf gitcommit diff javascript typescript tsx jsdoc html css}"
 
 DIST=/out
@@ -44,17 +49,38 @@ NVIM="$DIST/nvim/bin/nvim"
 "$NVIM" --version | head -1
 
 # ---------------------------------------------------------------- rust toolchain
-log "rustup + stable (для rust-analyzer и tree-sitter CLI)"
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+log "rustup + toolchain ${RUST_VER} (для rust-analyzer)"
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --profile minimal --default-toolchain "${RUST_VER}"
 # shellcheck disable=SC1091
 source "$HOME/.cargo/env"
-rustc --version
+rustup default "${RUST_VER}"
+cargo --version; rustc --version
 
-log "Сборка rust-analyzer (долго)"
-git clone --depth 1 https://github.com/rust-lang/rust-analyzer /ra
-( cd /ra && cargo build --release --bin rust-analyzer )
+log "Сборка rust-analyzer ${RA_TAG} (cargo ${RUST_VER}, -j${RA_JOBS}) — долго"
+# --branch на тег: 2023-11-27 — последний rust-analyzer, реально собирающийся на 1.70.
+# (2024-01-01 объявляет MSRV 1.70, но падает E0445 из-за InFileWrapper от 2023-11-28.)
+# committed Cargo.lock в этом теге фиксирует версии зависимостей → сборка детерминирована.
+git clone --depth 1 --branch "${RA_TAG}" https://github.com/rust-lang/rust-analyzer /ra
+# --jobs ограничивает параллелизм codegen — главный источник пикового ОЗУ при сборке.
+( cd /ra && cargo build --release --jobs "${RA_JOBS}" --bin rust-analyzer )
 cp /ra/target/release/rust-analyzer "$DIST/bin/rust-analyzer"
 "$DIST/bin/rust-analyzer" --version
+
+# ---------------------------------------------------------------- CLI-инструменты для пикеров
+# ripgrep (<leader>sg/sG греп) и fd (<leader>ff поиск файлов). Готовые static-musl бинарники:
+# статически слинкованы, от glibc не зависят вовсе → работают на любой Astra.
+log "ripgrep ${RG_VER} + fd ${FD_VER} (static-musl) → dist/bin"
+curl -fsSL -o /tmp/rg.tgz \
+  "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VER}/ripgrep-${RG_VER}-x86_64-unknown-linux-musl.tar.gz"
+tar xzf /tmp/rg.tgz -C /tmp
+cp /tmp/ripgrep-${RG_VER}-x86_64-unknown-linux-musl/rg "$DIST/bin/rg"
+"$DIST/bin/rg" --version | head -1
+curl -fsSL -o /tmp/fd.tgz \
+  "https://github.com/sharkdp/fd/releases/download/v${FD_VER}/fd-v${FD_VER}-x86_64-unknown-linux-musl.tar.gz"
+tar xzf /tmp/fd.tgz -C /tmp
+cp /tmp/fd-v${FD_VER}-x86_64-unknown-linux-musl/fd "$DIST/bin/fd"
+"$DIST/bin/fd" --version
 
 # ---------------------------------------------------------------- Node + TS LSP
 log "Node ${NODE_VER} (для TS/JS LSP) + vtsls + typescript"
@@ -89,6 +115,23 @@ return {
     clangd = { mason = false },
     vtsls  = { mason = false },   -- TS/JS сервер (bundled Node) из PATH
   } } },
+}
+LUA
+
+# Греп от папки под курсором в explorer'е: встал на каталог → <leader>sG ищет в нём.
+# picker_grep берёт cwd из выделенного элемента (для файла — его каталог).
+# Штатный <leader>/ делает то же самое; здесь дублируем на привычную грепу клавишу.
+# Префикс astra- = спек комплекта: install-system.sh обновляет такие файлы
+# у всех пользователей при каждом запуске nvim (см. wrapper). Личные спеки
+# пользователя называются как угодно иначе и не трогаются.
+cat > "$HOME/.config/nvim/lua/plugins/astra-explorer-grep.lua" <<'LUA'
+return {
+  {
+    "folke/snacks.nvim",
+    opts = { picker = { sources = { explorer = { win = { list = { keys = {
+      ["<leader>sG"] = "picker_grep",
+    } } } } } } },
+  },
 }
 LUA
 
