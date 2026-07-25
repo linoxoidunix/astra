@@ -31,7 +31,7 @@ GitHub Release** (готовое, ничего собирать не надо), 
 Раскладка, которую ждут скрипты (архивы — в `dist/`, бинарники — в `dist/bin/`):
 
 ```
-astra/
+<репозиторий>/
 └── dist/
     ├── nvim.tar.gz
     ├── node.tar.gz            # Node.js 20 (для TS/JS LSP)
@@ -49,16 +49,16 @@ astra/
 
 **Вариант A — скачать из Release** (на машине с интернетом):
 ```bash
-git clone https://github.com/<you>/astra.git
-cd astra
+# склонировать репозиторий с комплектом и перейти в него
+cd <репозиторий>
 mkdir -p dist/bin
-gh release download v0.2.0 --repo <you>/astra -p '*.tar.gz'      -D dist/
-gh release download v0.2.0 --repo <you>/astra -p 'rust-analyzer' -D dist/bin/
+gh release download v0.2.0 --repo <владелец>/<репозиторий> -p '*.tar.gz'      -D dist/
+gh release download v0.2.0 --repo <владелец>/<репозиторий> -p 'rust-analyzer' -D dist/bin/
 ```
 Без `gh` — через `curl`:
 ```bash
 mkdir -p dist/bin
-base=https://github.com/<you>/astra/releases/download/v0.2.0
+base=<адрес-релиза>          # .../releases/download/v0.2.0
 for f in nvim node ts-lsp codelldb lazyvim-config lazyvim-data fonts parsers; do
   curl -fL -o dist/$f.tar.gz $base/$f.tar.gz
 done
@@ -130,7 +130,7 @@ bash install/install-rust.sh none       # только тулчейн, без к
 **Развернуть на Astra:**
 ```bash
 # исходники приезжают с git clone (cargo/vendor/); windows-часть — из Release:
-gh release download v0.2.0 --repo <you>/astra -p 'cargo-vendor-win.tar.gz' -D dist/
+gh release download v0.2.0 --repo <владелец>/<репозиторий> -p 'cargo-vendor-win.tar.gz' -D dist/
 # слить обе части + debian-реестр в объединённый реестр:
 sudo bash install/build-registry.sh cargo/vendor dist/cargo-vendor-win.tar.gz
 cp /opt/astra-dev/cargo-registry.config.toml ~/.cargo/config.toml
@@ -148,7 +148,7 @@ cargo build --offline          # tokio = { version = "1.47", features = ["full"]
 последовательность от начала до рабочего окружения:
 
 ```bash
-cd astra    # каталог с репозиторием и dist/
+cd <репозиторий>    # каталог с репозиторием и dist/
 
 # 1) Neovim + LazyVim + плагины + rust-analyzer + парсеры + шрифт
 bash install/install.sh                 # для текущего пользователя ($HOME)
@@ -185,12 +185,12 @@ JS/TS), НЕ гоняй установку с нуля. `install/install.sh` —
 
 **На машине с интернетом** — обновить репозиторий и скачать нужные ассеты в `dist/`:
 ```bash
-cd astra && git pull
-gh release download v0.2.0 --repo <you>/astra --clobber -D dist/ \
+cd <репозиторий> && git pull
+gh release download v0.2.0 --repo <владелец>/<репозиторий> --clobber -D dist/ \
   -p 'node.tar.gz' -p 'ts-lsp.tar.gz' \
   -p 'lazyvim-config.tar.gz' -p 'lazyvim-data.tar.gz' -p 'parsers.tar.gz'
 ```
-(набор `-p` — то, что реально поменялось; для JS/TS это эти пять). Перенести `astra/`
+(набор `-p` — то, что реально поменялось; для JS/TS это эти пять). Перенести каталог репозитория
 на целевую машину.
 
 **На целевой машине** — два шага:
@@ -227,7 +227,7 @@ curl -fsSL https://github.com/sharkdp/fd/releases/download/v10.2.0/fd-v10.2.0-x8
   | tar xz -O --wildcards '*/fd' > dist/bin/fd
 chmod +x dist/bin/rg dist/bin/fd
 ```
-Перенести `astra/` на целевую машину (или просто скопировать туда эти два файла).
+Перенести каталог репозитория на целевую машину (или просто скопировать туда эти два файла).
 
 **На целевой машине:**
 ```bash
@@ -247,7 +247,7 @@ bash install/install-tools.sh              # или: sudo bash install/install-t
 
 **На машине с интернетом** — скачать ассет в `dist/`:
 ```bash
-gh release download v0.2.0 --repo <you>/astra --clobber -D dist/ \
+gh release download v0.2.0 --repo <владелец>/<репозиторий> --clobber -D dist/ \
   -p 'codelldb.tar.gz' -p 'lazyvim-config.tar.gz' -p 'lazyvim-data.tar.gz'
 ```
 
