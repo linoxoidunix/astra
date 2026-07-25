@@ -40,6 +40,12 @@ rm -rf "$PREFIX/codelldb"
 tar xzf "$DIST/codelldb.tar.gz" -C "$PREFIX"
 ln -sf "$PREFIX/codelldb/adapter/codelldb" "$BIN/codelldb"
 
+# Форматтеры Qt5 — без них QString/QMap в панели переменных выглядят как d:0x...
+if [ -f "$ROOT/lldb/qt5_lldb.py" ]; then
+    say "форматтеры Qt5 → $PREFIX/codelldb/qt5_lldb.py"
+    install -m644 "$ROOT/lldb/qt5_lldb.py" "$PREFIX/codelldb/qt5_lldb.py"
+fi
+
 say "Проверка"
 "$PREFIX/codelldb/lldb/bin/lldb" --version
 "$BIN/codelldb" --help >/dev/null && echo "адаптер запускается"

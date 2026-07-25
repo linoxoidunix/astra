@@ -33,6 +33,8 @@ if [ -f "$DIST/codelldb.tar.gz" ]; then   # отладчик C/C++/Rust (nvim-da
     rm -rf ~/.local/codelldb
     tar xzf "$DIST/codelldb.tar.gz" -C ~/.local
     ln -sf ~/.local/codelldb/adapter/codelldb ~/.local/bin/codelldb
+    # форматтеры Qt5 для панели переменных (QString/QMap/QHash/QVariant и пр.)
+    [ -f "$ROOT/lldb/qt5_lldb.py" ] && install -m644 "$ROOT/lldb/qt5_lldb.py" ~/.local/codelldb/qt5_lldb.py
 fi
 
 if [ -f "$DIST/node.tar.gz" ]; then

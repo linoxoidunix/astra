@@ -270,6 +270,11 @@ return {
       if not exe then return end
       local dap = require("dap")
       dap.adapters.codelldb = adapter(exe, lib)
+      -- Форматтеры Qt5: LLDB из коробки знает STL, но не знает Qt — QString и QMap
+      -- показываются сырым указателем d. Файл кладут установщики рядом с адаптером;
+      -- если его нет, initCommands пустой и всё работает как раньше.
+      local qt = vim.fs.dirname(vim.fs.dirname(exe)) .. "/qt5_lldb.py"
+      local init_cmds = vim.uv.fs_stat(qt) and { "command script import " .. qt } or {}
       for _, ft in ipairs({ "c", "cpp" }) do
         dap.configurations[ft] = {
           {
@@ -282,6 +287,7 @@ return {
             cwd = "${workspaceFolder}",
             args = {},
             stopOnEntry = false,
+            initCommands = init_cmds,
           },
           {
             name = "Подключиться к процессу",

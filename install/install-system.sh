@@ -65,6 +65,9 @@ if [ -f "$DIST/codelldb.tar.gz" ]; then
     rm -rf "$PREFIX/codelldb"
     tar xzf "$DIST/codelldb.tar.gz" -C "$PREFIX"
     ln -sf "$PREFIX/codelldb/adapter/codelldb" /usr/local/bin/codelldb
+    # Форматтеры Qt5: LLDB знает STL, но не Qt — без них QString и QMap показываются
+    # сырым указателем d. Спек astra-dap.lua ищет файл рядом с адаптером.
+    [ -f "$ROOT/lldb/qt5_lldb.py" ] && install -m644 "$ROOT/lldb/qt5_lldb.py" "$PREFIX/codelldb/qt5_lldb.py"
 fi
 
 # --- Node.js + TS/JS LSP (vtsls) → /opt/astra-dev + /usr/local/bin ----------
