@@ -28,6 +28,13 @@ for tool in rg fd; do   # ripgrep (<leader>sg/sG греп) и fd (<leader>ff п�
     [ -f "$DIST/bin/$tool" ] && { install -m755 "$DIST/bin/$tool" ~/.local/bin/$tool; say "$tool → ~/.local/bin"; }
 done
 
+if [ -f "$DIST/codelldb.tar.gz" ]; then   # отладчик C/C++/Rust (nvim-dap, <leader>dc)
+    say "codelldb → ~/.local/codelldb"
+    rm -rf ~/.local/codelldb
+    tar xzf "$DIST/codelldb.tar.gz" -C ~/.local
+    ln -sf ~/.local/codelldb/adapter/codelldb ~/.local/bin/codelldb
+fi
+
 if [ -f "$DIST/node.tar.gz" ]; then
     say "Node.js → ~/.local/node (для TS/JS LSP)"
     rm -rf ~/.local/node

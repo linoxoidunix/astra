@@ -57,6 +57,16 @@ for tool in rg fd; do
     [ -f "$DIST/bin/$tool" ] && { say "$tool → /usr/local/bin"; install -m755 "$DIST/bin/$tool" /usr/local/bin/$tool; }
 done
 
+# --- codelldb (отладчик C/C++/Rust) → /opt/astra-dev + /usr/local/bin -------
+# Кладём деревом: спек astra-dap.lua находит liblldb рядом с адаптером,
+# разыменовав симлинк из /usr/local/bin.
+if [ -f "$DIST/codelldb.tar.gz" ]; then
+    say "codelldb (отладчик C/C++/Rust) → $PREFIX/codelldb"
+    rm -rf "$PREFIX/codelldb"
+    tar xzf "$DIST/codelldb.tar.gz" -C "$PREFIX"
+    ln -sf "$PREFIX/codelldb/adapter/codelldb" /usr/local/bin/codelldb
+fi
+
 # --- Node.js + TS/JS LSP (vtsls) → /opt/astra-dev + /usr/local/bin ----------
 if [ -f "$DIST/node.tar.gz" ]; then
     say "Node.js → $PREFIX/node (для TS/JS LSP, общий для всех)"
@@ -106,6 +116,35 @@ say "LazyVim config+плагины → $SKEL (заготовка для поль
 rm -rf "$SKEL/.config/nvim" "$SKEL/.local/share/nvim"
 tar xzf "$DIST/lazyvim-config.tar.gz" -C "$SKEL/.config"
 tar xzf "$DIST/lazyvim-data.tar.gz"   -C "$SKEL/.local/share"
+
+# --- миграция домашек: экстры LazyVim → lazyvim.json ------------------------
+# Раньше экстры подключались импортами из lua/plugins/extras.lua. Файл лежит в
+# lua/plugins, поэтому каталог plugins регистрируется раньше экстр, и LazyVim
+# на каждом старте пишет «The order of your `lazy.nvim` imports is incorrect».
+# Теперь экстры едут в lazyvim.json (штатный механизм :LazyExtras) — он
+# импортируется из самого lazyvim.plugins, и порядок получается правильный.
+# Новым пользователям это приезжает со skel; уже запускавшим nvim — здесь.
+# В lazyvim.json нет других строк вида lazyvim.plugins.extras.* — берём их grep'ом,
+# не разбирая JSON (формат файла LazyVim переписывает по-своему).
+EXTRAS=$(grep -o '"lazyvim\.plugins\.extras\.[^"]*"' \
+    "$SKEL/.config/nvim/lazyvim.json" 2>/dev/null | tr -d '"' | tr '\n' ' ')
+if [ -n "$EXTRAS" ]; then
+    say "Экстры LazyVim → lazyvim.json в домашках (миграция с lua/plugins/extras.lua)"
+    for home in /root /home/*; do
+        cfg="$home/.config/nvim"
+        [ -d "$cfg" ] || continue
+        # старый спек комплекта с импортами экстр — теперь лишний и вредный
+        if [ -f "$cfg/lua/plugins/extras.lua" ] \
+           && grep -q 'lazyvim\.plugins\.extras\.' "$cfg/lua/plugins/extras.lua"; then
+            rm -f "$cfg/lua/plugins/extras.lua"
+        fi
+        # shellcheck disable=SC2086
+        "$NVIM_REAL" --headless -l "$HERE/_merge-extras.lua" "$cfg/lazyvim.json" $EXTRAS \
+            >/dev/null 2>&1 || continue
+        chown --reference="$cfg" "$cfg/lazyvim.json" 2>/dev/null || true
+        echo "  $cfg/lazyvim.json"
+    done
+fi
 
 # --- Nerd Font → /usr/share/fonts ------------------------------------------
 say "Nerd Font → /usr/share/fonts/astra-nerd"

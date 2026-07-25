@@ -11,6 +11,7 @@
 | Neovim (последний) | собирается под glibc 2.28 |
 | LazyVim + плагины (rust, clangd, cmake, typescript) | клон на этапе сборки |
 | rust-analyzer (Rust LSP) | собирается из исходников |
+| codelldb (отладчик C/C++/Rust) + nvim-dap | готовый vsix, целиком со своим lldb |
 | Node.js 20 + vtsls (TS/JS LSP) | Node LTS под glibc 2.28 + `npm i` vtsls/typescript |
 | treesitter-парсеры (rust/cpp/c/cmake/js/ts/tsx/…) | компилятся из грамматик под 2.28 |
 | JetBrainsMono Nerd Font | из nerd-fonts |
@@ -27,7 +28,7 @@
 Установщики читают собранный бандл из каталога `dist/`. Его либо **скачиваешь из
 GitHub Release** (готовое, ничего собирать не надо), либо **собираешь сам**.
 
-Раскладка, которую ждут скрипты (5 архивов — в `dist/`, бинарники — в `dist/bin/`):
+Раскладка, которую ждут скрипты (архивы — в `dist/`, бинарники — в `dist/bin/`):
 
 ```
 astra/
@@ -35,6 +36,7 @@ astra/
     ├── nvim.tar.gz
     ├── node.tar.gz            # Node.js 20 (для TS/JS LSP)
     ├── ts-lsp.tar.gz          # vtsls + typescript
+    ├── codelldb.tar.gz        # отладчик C/C++/Rust (адаптер + свой lldb)
     ├── lazyvim-config.tar.gz
     ├── lazyvim-data.tar.gz
     ├── fonts.tar.gz
@@ -234,6 +236,105 @@ bash install/install-tools.sh              # или: sudo bash install/install-t
 запущенного nvim, греп заработает без перезапуска (он спавнит `rg` заново на каждый
 ввод); если `PATH` дописывался в `~/.bashrc` только что — нужен новый терминал.
 
+### Отладчик codelldb (C/C++/Rust)
+
+Отладка в nvim — это две независимые части: **бинарь** `codelldb` (адаптер DAP плюс
+свой lldb) и **редакторная часть** (плагины `nvim-dap`/`nvim-dap-ui` и спек
+`astra-dap.lua`). Бинарь ставится инкрементально, редакторная часть приезжает только
+пересборкой бандла — доклонировать плагины офлайн на Astra нельзя.
+
+**На машине с интернетом** — скачать ассет в `dist/`:
+```bash
+gh release download v0.1.0 --repo linoxoidunix/astra --clobber -D dist/ \
+  -p 'codelldb.tar.gz' -p 'lazyvim-config.tar.gz' -p 'lazyvim-data.tar.gz'
+```
+
+**На целевой машине:**
+```bash
+bash install/install-dap.sh              # или: sudo bash install/install-dap.sh system
+```
+Кладёт дерево в `~/.local/codelldb` (или `/opt/astra-dev/codelldb`) и симлинк
+`codelldb` в `PATH`; больше ничего не трогает. Если бандл старый и плагинов
+`nvim-dap` в нём нет — нужен ещё шаг 2 из раздела выше (распаковка
+`lazyvim-config`/`lazyvim-data`).
+
+Клавиши: `<leader>db` точка останова, `<leader>dc` запуск/продолжить, `<leader>du`
+панель отладчика, `<leader>de` вычислить выражение. Для Rust — `<leader>dr`
+(`:RustLsp debuggables`, цели берутся из Cargo). Для C/C++ спрашивается путь к
+исполняемому файлу; собирать нужно с `-g`.
+
+Спек `astra-dap.lua` ищет адаптер через `PATH` и разыменовывает симлинк, чтобы найти
+`liblldb.so` рядом с настоящим бинарём — поэтому он одинаково работает и при
+установке в `$HOME`, и при системной.
+
+### Что чинить, если бандл старый (blink.cmp, порядок импортов, битый `target/`)
+
+Симптомы, которые видно на машинах с бандлом до этих правок, и что с ними делать.
+
+**1. `blink.cmp` лезет на github за бинарём fuzzy.**
+```
+blink.cmp Downloading pre-built binary
+blink.cmp Failed to download libblink_cmp_fuzzy.so.tmp
+curl: (6) Could not resolve host: github.com
+blink.cmp Falling back to Lua implementation ...
+```
+Автодополнение при этом работает (падает в Lua-реализацию), но ругань висит на каждом
+старте. Лечится спеком `astra-blink-offline.lua` — он включает Lua-реализацию явно и
+запрещает скачивание. Спек управляемый, разъедется по всем при следующем `nvim`:
+```bash
+sudo tee /opt/astra-dev/skel/.config/nvim/lua/plugins/astra-blink-offline.lua >/dev/null <<'LUA'
+return {
+  {
+    "saghen/blink.cmp",
+    opts = { fuzzy = { implementation = "lua", prebuilt_binaries = { download = false } } },
+  },
+}
+LUA
+```
+
+**2. `The order of your lazy.nvim imports is incorrect`.** Экстры подключались
+импортами из `lua/plugins/extras.lua`, а каталог `plugins` регистрируется раньше их —
+LazyVim это и ловит. Теперь экстры едут в `lazyvim.json` (штатный `:LazyExtras`),
+который импортирует сам `lazyvim.plugins`. `install-system.sh` мигрирует все домашки
+сам; точечно, от имени пользователя, это те же два шага:
+```bash
+rm -f ~/.config/nvim/lua/plugins/extras.lua
+nvim --headless -l install/_merge-extras.lua ~/.config/nvim/lazyvim.json \
+  lazyvim.plugins.extras.coding.neogen lazyvim.plugins.extras.dap.core \
+  lazyvim.plugins.extras.lang.clangd  lazyvim.plugins.extras.lang.cmake \
+  lazyvim.plugins.extras.lang.rust    lazyvim.plugins.extras.lang.typescript
+```
+`_merge-extras.lua` только дописывает экстры, остальное в `lazyvim.json` (news-хэши,
+свои экстры) не трогает, и его можно гонять повторно.
+
+**3. `corrupt metadata encountered in target/debug/deps/libtokio-*.rmeta` (E0786), а
+следом `main function is not allowed to be async` (E0752).** Это одна поломка, а не
+две: в `target/` лежит недописанный `.rmeta` (прерванная сборка — выход из nvim, OOM,
+кончилось место), из-за него не грузится `tokio-macros`, поэтому `#[tokio::main]` не
+раскрывается и `async fn main` остаётся голым. Ни к версии rustc, ни к вендору крейтов
+отношения не имеет: тот же проект с `tokio 1.47` собирается на rustc 1.70 начисто.
+```bash
+cargo clean && cargo build --offline
+```
+Чтобы не повторялось, спек `astra-rust.lua` уводит проверки rust-analyzer в отдельный
+`target/rust-analyzer` — сборка из редактора и сборка из терминала больше не пишут
+в одни и те же файлы.
+
+**4. `rust-analyzer: -32603: request handler panicked: projecting associated item
+ProjectionTy { def_id: TypeAliasId("Output") } from future, which is not Output`, а
+`gd` отвечает `no result found for lsp_definition`.** rust-analyzer не смог вывести
+`Future::Output` и уронил inference всего файла — отсюда и отказ goto. Ловится там же,
+где п.3 (сломанное раскрытие `#[tokio::main]`), поэтому сперва `cargo clean` и заново
+открыть проект. Если осталось — снять версии, они должны быть от комплекта:
+```bash
+which -a rust-analyzer && rust-analyzer --version   # ожидается 0.3.1748 (тег 2023-11-27)
+rustc --version                                     # 1.70.0 из репозиториев Astra
+```
+Обновлять rust-analyzer в надежде вылечить **не надо**: на чистом проекте
+(`tokio 1.47` + rustc 1.70) сборки 2023-11-27, 2024-06-03 и 2025-06-30 отрабатывают без
+паники, а свежая 2026-07-20 на том же проекте падает ровно этим сообщением — с
+устаревшим sysroot новые сборки хуже, а не лучше.
+
 ### Правка конфига LazyVim для всех пользователей
 
 Конфиг у каждого пользователя **свой** (`~/.config/nvim`): `install-system.sh` держит
@@ -292,11 +393,17 @@ cd <rust-проект> && nvim src/main.rs   # rust-analyzer подцепитс�
 nvim file.cpp                          # clangd подцепится
 node --version                         # bundled Node 20
 nvim file.ts                           # vtsls подцепится (:LspInfo → vtsls)
+codelldb --help >/dev/null && echo ok  # адаптер отладчика запускается
 ```
 
 ## Заметки
 - Всё, что требует свежего glibc/интернета, собирается в Buster-контейнере —
   готовые сборки Neovim/rust-analyzer с GitHub требуют glibc ≥ 2.31 и на Astra 2.28 не идут.
+- codelldb берётся готовым vsix, а не собирается: сборка тянет LLVM/LLDB на часы,
+  а релизные бинарники и так требуют максимум `GLIBC_2.18` (проверено `objdump -T`
+  по всем ELF пакета) и не зависят от `libstdc++` — на 2.28 идут как есть. Проверено
+  живой DAP-сессией в buster: точка останова, стек, STL-переменные, `evaluate`.
+  `unzip` не сохраняет бит исполнения — после распаковки vsix нужен `chmod +x`.
 - podman: контейнер запускается с `--network=host` (иначе из NAT-контейнера не виден
   прокси), ro-монтирования — с меткой `:z`/`:Z` (SELinux на Fedora).
 - Rust-проекты собираются офлайн из `librust-*-dev` через `~/.cargo/config.toml`.

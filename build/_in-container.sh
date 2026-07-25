@@ -17,6 +17,7 @@ RA_TAG="${RA_TAG:-2023-11-27}"       # последний релиз rust-analyz
 RA_JOBS="${RA_JOBS:-2}"              # параллельных задач cargo: меньше = меньше пик ОЗУ (LLVM codegen)
 RG_VER="${RG_VER:-14.1.1}"          # ripgrep для LazyVim-грепа (<leader>sg/sG); static-musl, без glibc
 FD_VER="${FD_VER:-10.2.0}"          # fd для файлового пикера (<leader>ff); static-musl, без glibc
+CODELLDB_VER="${CODELLDB_VER:-v1.12.2}"  # отладчик C/C++/Rust (DAP-адаптер + свой lldb)
 TS_LANGS="${TS_LANGS:-c cpp cmake rust lua luadoc vim vimdoc query markdown markdown_inline bash json yaml toml regex printf gitcommit diff javascript typescript tsx jsdoc html css}"
 
 DIST=/out
@@ -82,6 +83,25 @@ tar xzf /tmp/fd.tgz -C /tmp
 cp /tmp/fd-v${FD_VER}-x86_64-unknown-linux-musl/fd "$DIST/bin/fd"
 "$DIST/bin/fd" --version
 
+# ---------------------------------------------------------------- codelldb (отладчик)
+# Готовый vsix, а не сборка из исходников: собирать codelldb — это тянуть в контейнер
+# LLVM/LLDB на часы. Проверено objdump'ом и живой сессией в buster: максимум по всем
+# ELF пакета — GLIBC_2.18 (у нас 2.28), libstdc++ слинкован статически, Python свой.
+# vsix — обычный zip; unzip НЕ сохраняет бит исполнения, отсюда chmod ниже.
+log "codelldb ${CODELLDB_VER} (DAP-адаптер + свой lldb) → dist/codelldb"
+curl -fsSL -o /tmp/codelldb.vsix \
+  "https://github.com/vadimcn/codelldb/releases/download/${CODELLDB_VER}/codelldb-linux-x64.vsix"
+rm -rf /tmp/cl "$DIST/codelldb"; mkdir -p /tmp/cl "$DIST/codelldb"
+unzip -q /tmp/codelldb.vsix -d /tmp/cl
+# нужны только адаптер и lldb; extension/bin (25 МБ) — обвязка VSCode, не нужна
+cp -a /tmp/cl/extension/adapter "$DIST/codelldb/adapter"
+cp -a /tmp/cl/extension/lldb    "$DIST/codelldb/lldb"
+chmod -R a+rX "$DIST/codelldb"
+chmod a+x "$DIST/codelldb/adapter/codelldb" "$DIST/codelldb/lldb/bin/"*
+find "$DIST/codelldb" -name '*.so' -exec chmod a+x {} +
+"$DIST/codelldb/lldb/bin/lldb" --version
+"$DIST/codelldb/adapter/codelldb" --help >/dev/null && echo "адаптер codelldb запускается"
+
 # ---------------------------------------------------------------- Node + TS LSP
 log "Node ${NODE_VER} (для TS/JS LSP) + vtsls + typescript"
 curl -fsSL -o /tmp/node.tar.xz \
@@ -101,20 +121,90 @@ rm -rf "$HOME/.config/nvim" "$HOME/.local/share/nvim" "$HOME/.local/state/nvim" 
 git clone --depth 1 https://github.com/LazyVim/starter "$HOME/.config/nvim"
 rm -rf "$HOME/.config/nvim/.git"
 mkdir -p "$HOME/.config/nvim/lua/plugins"
-cat > "$HOME/.config/nvim/lua/plugins/extras.lua" <<'LUA'
+
+# Экстры подключаем через lazyvim.json — это штатный механизм :LazyExtras. Его
+# импортирует сам модуль lazyvim.plugins, поэтому порядок получается правильный:
+# lazyvim.plugins → extras → plugins. Если писать { import = "lazyvim.plugins.extras..." }
+# внутри lua/plugins/*.lua, каталог plugins регистрируется РАНЬШЕ экстр, и LazyVim
+# ругается на каждом старте (check_order в lazyvim/config/init.lua):
+#   The order of your `lazy.nvim` imports is incorrect
+#
+# "version" обязателен. Файл без него LazyVim считает схемой v0 и гонит миграцию,
+# которая дописывает каждому имени префикс "lazyvim.plugins.extras." (util/json.lua):
+#   Failed to load `lazyvim.plugins.extras.lazyvim.plugins.extras.coding.neogen`
+# После этого экстры не грузятся вовсе, а `Lazy! sync` вычищает их плагины
+# (clangd_extensions, cmake-tools, crates.nvim, neogen) как «лишние».
+# 8 — текущая версия схемы (lazyvim/config/init.lua: M.json.version).
+cat > "$HOME/.config/nvim/lazyvim.json" <<'JSON'
+{
+  "version": 8,
+  "install_version": 8,
+  "extras": [
+    "lazyvim.plugins.extras.coding.neogen",
+    "lazyvim.plugins.extras.dap.core",
+    "lazyvim.plugins.extras.lang.clangd",
+    "lazyvim.plugins.extras.lang.cmake",
+    "lazyvim.plugins.extras.lang.rust",
+    "lazyvim.plugins.extras.lang.typescript"
+  ]
+}
+JSON
+
+# neogen — Doxygen/rustdoc/JSDoc аннотации (<leader>cn); dap.core — nvim-dap + dap-ui
+# (адаптер задаётся в astra-dap.lua).
+cat > "$HOME/.config/nvim/lua/plugins/astra-lsp-offline.lua" <<'LUA'
 return {
-  { import = "lazyvim.plugins.extras.lang.rust" },
-  { import = "lazyvim.plugins.extras.lang.clangd" },
-  { import = "lazyvim.plugins.extras.lang.cmake" },
-  { import = "lazyvim.plugins.extras.lang.typescript" },
-  { import = "lazyvim.plugins.extras.coding.neogen" },  -- Doxygen/rustdoc/JSDoc аннотации: <leader>cn
-  -- офлайн: mason ничего не доустанавливает, LSP берём из PATH
-  { "mason.nvim", opts = { ensure_installed = {} } },
+  -- офлайн: mason ничего не доустанавливает, LSP берём из PATH.
+  -- Именно функцией, а не таблицей: lang.rust дописывает codelldb в ensure_installed
+  -- своей opts-функцией, а функции применяются после таблиц — и эта, будучи ПОСЛЕ
+  -- экстр, отрабатывает последней и обнуляет список.
+  { "mason.nvim", opts = function(_, opts) opts.ensure_installed = {} end },
   { "nvim-lspconfig", opts = { servers = {
     rust_analyzer = { mason = false },  -- собранный бинарь (dist/bin) из PATH
     clangd = { mason = false },
     vtsls  = { mason = false },   -- TS/JS сервер (bundled Node) из PATH
   } } },
+}
+LUA
+
+# blink.cmp (движок автодополнения LazyVim) по умолчанию тянет с github готовую
+# libblink_cmp_fuzzy.so, а при неудаче предлагает собрать её nightly-cargo. Офлайн
+# не выходит ни то, ни другое:
+#   curl: (6) Could not resolve host: github.com
+#   Falling back to Lua implementation due to error while downloading pre-built binary
+# Lua-реализация fuzzy встроена в плагин и ничего внешнего не требует — включаем её
+# явно, чтобы не было ни попыток скачивания, ни предупреждения на каждом старте.
+cat > "$HOME/.config/nvim/lua/plugins/astra-blink-offline.lua" <<'LUA'
+return {
+  {
+    "saghen/blink.cmp",
+    opts = {
+      fuzzy = {
+        implementation = "lua",
+        prebuilt_binaries = { download = false },
+      },
+    },
+  },
+}
+LUA
+
+# rust-analyzer (его поднимает rustaceanvim из экстры lang.rust) гоняет `cargo check`
+# в том же target/, что и ручной `cargo build`. Прерванная проверка (выход из nvim,
+# OOM на слабой машине) оставляет недописанный .rmeta, дальше сыпется
+#   corrupt metadata encountered in target/debug/deps/libtokio-*.rmeta   (E0786)
+# а следом не раскрывается #[tokio::main]:
+#   `main` function is not allowed to be `async`                          (E0752)
+# extraArgs уводит проверки в отдельный target/rust-analyzer: сборка редактора и
+# сборка из терминала больше не пересекаются. Лечение уже случившегося — `cargo clean`.
+# Опцию cargo.targetDir не используем: в rust-analyzer 2023-11-27 её ещё нет.
+cat > "$HOME/.config/nvim/lua/plugins/astra-rust.lua" <<'LUA'
+return {
+  {
+    "mrcjkb/rustaceanvim",
+    opts = { server = { default_settings = { ["rust-analyzer"] = {
+      check = { extraArgs = { "--target-dir", "target/rust-analyzer" } },
+    } } } },
+  },
 }
 LUA
 
@@ -135,9 +225,113 @@ return {
 }
 LUA
 
+# Отладка C/C++/Rust через codelldb из комплекта. Адаптер ищется в PATH, liblldb —
+# рядом с ним (<корень>/adapter/codelldb → <корень>/lldb/lib/liblldb.so), поэтому
+# спек одинаково работает и при системной установке, и при установке в $HOME.
+cat > "$HOME/.config/nvim/lua/plugins/astra-dap.lua" <<'LUA'
+-- Путь к адаптеру и его liblldb. exepath даёт симлинк из /usr/local/bin —
+-- разыменовываем, иначе не найти lldb/lib рядом с настоящим бинарём.
+local function codelldb()
+  local exe = vim.fn.exepath("codelldb")
+  if exe == "" then return nil end
+  local real = vim.uv.fs_realpath(exe) or exe
+  local lib = vim.fs.dirname(vim.fs.dirname(real)) .. "/lldb/lib/liblldb.so"
+  if not vim.uv.fs_stat(lib) then return real, nil end
+  return real, lib
+end
+
+local function adapter(exe, lib)
+  return {
+    type = "server",
+    host = "127.0.0.1",
+    port = "${port}",
+    executable = {
+      command = exe,
+      args = lib and { "--liblldb", lib, "--port", "${port}" } or { "--port", "${port}" },
+    },
+  }
+end
+
+return {
+  -- Офлайн: докачивать адаптеры нечем и незачем, codelldb уже лежит в PATH.
+  -- Выключать плагин целиком (enabled = false) НЕЛЬЗЯ: config самой dap.core зовёт
+  -- его setup() под проверкой LazyVim.has(), а та видит и отключённые спеки, — и
+  -- nvim-dap падает на старте "attempt to call field 'setup' (a nil value)".
+  -- Поэтому оставляем, но глушим: ничего не ставит и в сеть не ходит.
+  {
+    "jay-babu/mason-nvim-dap.nvim",
+    opts = { automatic_installation = false, ensure_installed = {} },
+  },
+
+  {
+    "mfussenegger/nvim-dap",
+    opts = function()
+      local exe, lib = codelldb()
+      if not exe then return end
+      local dap = require("dap")
+      dap.adapters.codelldb = adapter(exe, lib)
+      for _, ft in ipairs({ "c", "cpp" }) do
+        dap.configurations[ft] = {
+          {
+            name = "Запустить бинарь (спросить путь)",
+            type = "codelldb",
+            request = "launch",
+            program = function()
+              return vim.fn.input("Путь к исполняемому файлу: ", vim.fn.getcwd() .. "/", "file")
+            end,
+            cwd = "${workspaceFolder}",
+            args = {},
+            stopOnEntry = false,
+          },
+          {
+            name = "Подключиться к процессу",
+            type = "codelldb",
+            request = "attach",
+            pid = require("dap.utils").pick_process,
+            cwd = "${workspaceFolder}",
+          },
+        }
+      end
+    end,
+  },
+
+  {
+    -- lang.rust прописывает адаптеру mason-путь ($MASON/opt/lldb/...), которого у нас
+    -- нет. Его config сливает opts в vim.g.rustaceanvim режимом "keep" — уже заданное
+    -- побеждает, поэтому выставляем свой адаптер здесь, в init (до загрузки плагина).
+    "mrcjkb/rustaceanvim",
+    optional = true,
+    init = function()
+      local exe, lib = codelldb()
+      if not exe then return end
+      vim.g.rustaceanvim = vim.tbl_deep_extend("keep", vim.g.rustaceanvim or {}, {
+        dap = { adapter = adapter(exe, lib) },
+      })
+    end,
+  },
+}
+LUA
+
 log "Lazy! sync (клон плагинов)"
 "$NVIM" --headless "+Lazy! sync" +qa 2>&1 | tail -15 || true
 echo "плагинов: $(ls "$HOME/.local/share/nvim/lazy" | wc -l)"
+
+# Каждый каталог плагина обязан быть git-репозиторием. Без .git у lazy.nvim пустеет
+# Git.info, и на целевой машине любой Lazy! sync/clean падает:
+#   lazy/manage/lock.lua:26: bad argument #1 to 'assert' (value expected)
+# Обычный старт при этом чистый, поэтому такой бандл легко уехать незамеченным
+# (так в комплект попал neogen без .git). Ловим здесь, а не у пользователя.
+nogit=""
+for d in "$HOME/.local/share/nvim/lazy"/*/; do
+    [ -d "$d" ] || continue
+    [ -e "$d/.git" ] || nogit="$nogit ${d%/}"
+done
+if [ -n "$nogit" ]; then
+    echo "ОШИБКА: каталоги плагинов без .git —$nogit" >&2
+    echo "Бандл с таким плагином ломает Lazy! sync на Astra. Сборка прервана." >&2
+    exit 1
+fi
+echo "все каталоги плагинов — git-репозитории"
 
 log "Treesitter-парсеры: компиляция из грамматик по реестру nvim-treesitter"
 cat > /tmp/gen.lua <<'GEN'
@@ -179,6 +373,7 @@ log "Упаковка dist"
 tar czf "$DIST/nvim.tar.gz"           -C "$DIST" nvim && rm -rf "$DIST/nvim"
 tar czf "$DIST/node.tar.gz"           -C "$DIST" node && rm -rf "$DIST/node"
 tar czf "$DIST/ts-lsp.tar.gz"         -C "$DIST" ts-lsp && rm -rf "$DIST/ts-lsp"
+tar czf "$DIST/codelldb.tar.gz"       -C "$DIST" codelldb && rm -rf "$DIST/codelldb"
 tar czf "$DIST/lazyvim-config.tar.gz" -C "$HOME/.config" nvim
 tar czf "$DIST/lazyvim-data.tar.gz"   -C "$HOME/.local/share" nvim
 ( cd "$DIST/fonts" && tar czf "$DIST/fonts.tar.gz" ./*.ttf ) && rm -rf "$DIST/fonts"
