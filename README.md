@@ -52,17 +52,19 @@ astra/
 git clone https://github.com/linoxoidunix/astra.git
 cd astra
 mkdir -p dist/bin
-gh release download v0.1.0 --repo linoxoidunix/astra -p '*.tar.gz'      -D dist/
-gh release download v0.1.0 --repo linoxoidunix/astra -p 'rust-analyzer' -D dist/bin/
+gh release download v0.2.0 --repo linoxoidunix/astra -p '*.tar.gz'      -D dist/
+gh release download v0.2.0 --repo linoxoidunix/astra -p 'rust-analyzer' -D dist/bin/
 ```
 Без `gh` — через `curl`:
 ```bash
 mkdir -p dist/bin
-base=https://github.com/linoxoidunix/astra/releases/download/v0.1.0
-for f in nvim lazyvim-config lazyvim-data fonts parsers; do
+base=https://github.com/linoxoidunix/astra/releases/download/v0.2.0
+for f in nvim node ts-lsp codelldb lazyvim-config lazyvim-data fonts parsers; do
   curl -fL -o dist/$f.tar.gz $base/$f.tar.gz
 done
-curl -fL -o dist/bin/rust-analyzer $base/rust-analyzer && chmod +x dist/bin/rust-analyzer
+for b in rust-analyzer rg fd; do
+  curl -fL -o dist/bin/$b $base/$b && chmod +x dist/bin/$b
+done
 ```
 
 **Вариант B — собрать самому** (нужны podman или docker + интернет):
@@ -128,7 +130,7 @@ bash install/install-rust.sh none       # только тулчейн, без к
 **Развернуть на Astra:**
 ```bash
 # исходники приезжают с git clone (cargo/vendor/); windows-часть — из Release:
-gh release download v0.1.0 --repo <you>/<repo> -p 'cargo-vendor-win.tar.gz' -D dist/
+gh release download v0.2.0 --repo <you>/<repo> -p 'cargo-vendor-win.tar.gz' -D dist/
 # слить обе части + debian-реестр в объединённый реестр:
 sudo bash install/build-registry.sh cargo/vendor dist/cargo-vendor-win.tar.gz
 cp /opt/astra-dev/cargo-registry.config.toml ~/.cargo/config.toml
@@ -184,7 +186,7 @@ JS/TS), НЕ гоняй установку с нуля. `install/install.sh` —
 **На машине с интернетом** — обновить репозиторий и скачать нужные ассеты в `dist/`:
 ```bash
 cd astra && git pull
-gh release download v0.1.0 --repo linoxoidunix/astra --clobber -D dist/ \
+gh release download v0.2.0 --repo linoxoidunix/astra --clobber -D dist/ \
   -p 'node.tar.gz' -p 'ts-lsp.tar.gz' \
   -p 'lazyvim-config.tar.gz' -p 'lazyvim-data.tar.gz' -p 'parsers.tar.gz'
 ```
@@ -245,7 +247,7 @@ bash install/install-tools.sh              # или: sudo bash install/install-t
 
 **На машине с интернетом** — скачать ассет в `dist/`:
 ```bash
-gh release download v0.1.0 --repo linoxoidunix/astra --clobber -D dist/ \
+gh release download v0.2.0 --repo linoxoidunix/astra --clobber -D dist/ \
   -p 'codelldb.tar.gz' -p 'lazyvim-config.tar.gz' -p 'lazyvim-data.tar.gz'
 ```
 
