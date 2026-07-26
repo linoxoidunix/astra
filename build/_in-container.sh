@@ -142,10 +142,16 @@ cat > "$HOME/.config/nvim/lazyvim.json" <<'JSON'
   "extras": [
     "lazyvim.plugins.extras.coding.neogen",
     "lazyvim.plugins.extras.dap.core",
+    "lazyvim.plugins.extras.editor.aerial",
+    "lazyvim.plugins.extras.editor.inc-rename",
+    "lazyvim.plugins.extras.editor.refactoring",
     "lazyvim.plugins.extras.lang.clangd",
     "lazyvim.plugins.extras.lang.cmake",
     "lazyvim.plugins.extras.lang.rust",
-    "lazyvim.plugins.extras.lang.typescript"
+    "lazyvim.plugins.extras.lang.typescript",
+    "lazyvim.plugins.extras.ui.indent-blankline",
+    "lazyvim.plugins.extras.ui.treesitter-context",
+    "lazyvim.plugins.extras.util.mini-hipatterns"
   ]
 }
 JSON
