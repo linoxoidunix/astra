@@ -263,8 +263,46 @@ return {
     opts = { automatic_installation = false, ensure_installed = {} },
   },
 
+  -- Русские подписи в which-key. Только описания: rhs не задаём, поэтому сами
+  -- клавиши остаются теми же, что ставит dap.core. opts-функцией и list_extend,
+  -- а не таблицей: иначе спек LazyVim со всеми остальными группами затрётся.
+  {
+    "folke/which-key.nvim",
+    opts = function(_, opts)
+      opts.spec = opts.spec or {}
+      vim.list_extend(opts.spec, {
+        { "<leader>d", group = "отладка" },
+        { "<leader>dp", group = "профайлер Neovim (Lua, не ваш код)" },
+        { "<leader>db", desc = "Точка останова: поставить/снять" },
+        { "<leader>dB", desc = "Точка останова с условием" },
+        { "<leader>dc", desc = "Запустить / продолжить" },
+        { "<leader>da", desc = "Запустить с аргументами" },
+        { "<leader>dC", desc = "Выполнять до курсора" },
+        { "<leader>dg", desc = "Перейти к строке (не выполняя)" },
+        { "<leader>di", desc = "Шаг внутрь вызова" },
+        { "<leader>dO", desc = "Шаг через строку" },
+        { "<leader>do", desc = "Шаг наружу из функции" },
+        { "<leader>dj", desc = "Ниже по стеку вызовов" },
+        { "<leader>dk", desc = "Выше по стеку вызовов" },
+        { "<leader>dl", desc = "Повторить последний запуск" },
+        { "<leader>dP", desc = "Пауза" },
+        { "<leader>dr", desc = "REPL отладчика (в Rust — цели Cargo)" },
+        { "<leader>ds", desc = "Текущая сессия" },
+        { "<leader>dt", desc = "Завершить сессию" },
+        { "<leader>dw", desc = "Значение под курсором" },
+        { "<leader>du", desc = "Панели отладчика" },
+        { "<leader>de", desc = "Вычислить выражение" },
+      })
+    end,
+  },
+
   {
     "mfussenegger/nvim-dap",
+    -- stylua: ignore
+    keys = {
+      { "<leader>dq", function() require("dap").list_breakpoints(true) end, desc = "Точки останова → quickfix" },
+      { "<leader>dx", function() require("dap").clear_breakpoints() end,    desc = "Снять все точки останова" },
+    },
     opts = function()
       local exe, lib = codelldb()
       if not exe then return end
