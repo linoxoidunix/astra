@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install-tools.sh — ИНКРЕМЕНТАЛЬНАЯ доустановка ripgrep + fd ПОВЕРХ уже
+# install-tools.sh — ИНКРЕМЕНТАЛЬНАЯ доустановка ripgrep + fd + lazygit ПОВЕРХ уже
 # установленного комплекта. Ничего не сносит: кладёт два бинарника в PATH.
 #
 #   bash install/install-tools.sh              # для текущего пользователя (~/.local/bin)
@@ -14,6 +14,7 @@
 # на машине с интернетом:
 #   curl -fsSL https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-musl.tar.gz | tar xz -O --wildcards '*/rg' > dist/bin/rg
 #   curl -fsSL https://github.com/sharkdp/fd/releases/download/v10.2.0/fd-v10.2.0-x86_64-unknown-linux-musl.tar.gz | tar xz -O --wildcards '*/fd' > dist/bin/fd
+#   curl -fsSL https://github.com/jesseduffield/lazygit/releases/download/v0.63.1/lazygit_0.63.1_Linux_x86_64.tar.gz | tar xz -O lazygit > dist/bin/lazygit
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -23,7 +24,7 @@ MODE="${1:-user}"
 say(){ printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 
 missing=""
-for tool in rg fd; do
+for tool in rg fd lazygit; do
     [ -f "$DIST/bin/$tool" ] || missing="$missing $tool"
 done
 [ -z "$missing" ] || { echo "Нет в $DIST/bin:$missing — см. шапку скрипта, как их туда положить."; exit 1; }
@@ -35,7 +36,7 @@ else
     BIN="$HOME/.local/bin"; mkdir -p "$BIN"
 fi
 
-for tool in rg fd; do
+for tool in rg fd lazygit; do
     say "$tool → $BIN"
     install -m755 "$DIST/bin/$tool" "$BIN/$tool"
 done
@@ -43,6 +44,7 @@ done
 say "Проверка"
 "$BIN/rg" --version | head -1
 "$BIN/fd" --version
+"$BIN/lazygit" --version
 
 cat <<EOF
 

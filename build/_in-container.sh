@@ -18,6 +18,7 @@ RA_JOBS="${RA_JOBS:-2}"              # параллельных задач cargo
 RG_VER="${RG_VER:-14.1.1}"          # ripgrep для LazyVim-грепа (<leader>sg/sG); static-musl, без glibc
 FD_VER="${FD_VER:-10.2.0}"          # fd для файлового пикера (<leader>ff); static-musl, без glibc
 CODELLDB_VER="${CODELLDB_VER:-v1.12.2}"  # отладчик C/C++/Rust (DAP-адаптер + свой lldb)
+LAZYGIT_VER="${LAZYGIT_VER:-0.63.1}"     # git-TUI для <leader>gg; статический Go-бинарь
 TS_LANGS="${TS_LANGS:-c cpp cmake rust lua luadoc vim vimdoc query markdown markdown_inline bash json yaml toml regex printf gitcommit diff javascript typescript tsx jsdoc html css}"
 
 DIST=/out
@@ -82,6 +83,15 @@ curl -fsSL -o /tmp/fd.tgz \
 tar xzf /tmp/fd.tgz -C /tmp
 cp /tmp/fd-v${FD_VER}-x86_64-unknown-linux-musl/fd "$DIST/bin/fd"
 "$DIST/bin/fd" --version
+
+# lazygit — полноэкранный git-TUI на <leader>gg (ветки, коммиты, постатейный стейдж).
+# Go-бинарь слинкован статически: от glibc не зависит вовсе, проверено в buster.
+log "lazygit ${LAZYGIT_VER} → dist/bin"
+curl -fsSL -o /tmp/lazygit.tgz \
+  "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VER}/lazygit_${LAZYGIT_VER}_Linux_x86_64.tar.gz"
+tar xzf /tmp/lazygit.tgz -C /tmp lazygit
+mv /tmp/lazygit "$DIST/bin/lazygit"
+"$DIST/bin/lazygit" --version
 
 # ---------------------------------------------------------------- codelldb (отладчик)
 # Готовый vsix, а не сборка из исходников: собирать codelldb — это тянуть в контейнер
@@ -227,6 +237,29 @@ return {
     opts = { picker = { sources = { explorer = { win = { list = { keys = {
       ["<leader>sG"] = "picker_grep",
     } } } } } } },
+  },
+}
+LUA
+
+# Окно lazygit (<leader>gg). Снэкс открывает его через свой терминал, поэтому если
+# пользователь настроит терминал сплитом снизу, lazygit уедет туда же узкой полоской.
+# Задаём окно в opts самого lazygit: они подмешиваются последними и побеждают
+# пользовательский terminal.win (в styles.lazygit писать бесполезно — перекроется).
+cat > "$HOME/.config/nvim/lua/plugins/astra-lazygit.lua" <<'LUA'
+return {
+  {
+    "folke/snacks.nvim",
+    opts = {
+      lazygit = {
+        win = {
+          position = "float",
+          width = 0.95,
+          height = 0.95,
+          border = "rounded",
+          backdrop = 60,
+        },
+      },
+    },
   },
 }
 LUA

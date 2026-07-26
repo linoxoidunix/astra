@@ -51,9 +51,10 @@ say "rust-analyzer → /usr/local/bin"
 install -m755 "$DIST/bin/rust-analyzer" /usr/local/bin/rust-analyzer
 
 # --- ripgrep + fd → /usr/local/bin -----------------------------------------
-# rg нужен грепу пикера (<leader>sg/sG), fd — поиску файлов (<leader>ff).
+# rg нужен грепу пикера (<leader>sg/sG), fd — поиску файлов (<leader>ff),
+# lazygit — git-TUI на <leader>gg (без него LazyVim эту клавишу вообще не вешает).
 # Без rg греп падает с "Failed to spawn rg".
-for tool in rg fd; do
+for tool in rg fd lazygit; do
     [ -f "$DIST/bin/$tool" ] && { say "$tool → /usr/local/bin"; install -m755 "$DIST/bin/$tool" /usr/local/bin/$tool; }
 done
 

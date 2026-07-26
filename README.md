@@ -12,6 +12,7 @@
 | LazyVim + плагины (rust, clangd, cmake, typescript) | клон на этапе сборки |
 | rust-analyzer (Rust LSP) | собирается из исходников |
 | codelldb (отладчик C/C++/Rust) + nvim-dap | готовый vsix, целиком со своим lldb |
+| lazygit (git-TUI на `<leader>gg`) | статический бинарь, от glibc не зависит |
 | Node.js 20 + vtsls (TS/JS LSP) | Node LTS под glibc 2.28 + `npm i` vtsls/typescript |
 | treesitter-парсеры (rust/cpp/c/cmake/js/ts/tsx/…) | компилятся из грамматик под 2.28 |
 | JetBrainsMono Nerd Font | из nerd-fonts |
@@ -44,7 +45,8 @@ GitHub Release** (готовое, ничего собирать не надо), 
     └── bin/
         ├── rust-analyzer
         ├── rg                 # ripgrep — греп в пикере (<leader>sg/sG)
-        └── fd                 # поиск файлов в пикере (<leader>ff)
+        ├── fd                 # поиск файлов в пикере (<leader>ff)
+        └── lazygit            # git-TUI на <leader>gg
 ```
 
 **Вариант A — скачать из Release** (на машине с интернетом):
@@ -62,7 +64,7 @@ base=<адрес-релиза>          # .../releases/download/v0.2.0
 for f in nvim node ts-lsp codelldb lazyvim-config lazyvim-data fonts parsers; do
   curl -fL -o dist/$f.tar.gz $base/$f.tar.gz
 done
-for b in rust-analyzer rg fd; do
+for b in rust-analyzer rg fd lazygit; do
   curl -fL -o dist/bin/$b $base/$b && chmod +x dist/bin/$b
 done
 ```
@@ -212,9 +214,10 @@ mkdir -p ~/.config/nvim/parser && tar xzf dist/parsers.tar.gz -C ~/.config/nvim/
 `nvim`-бинарь, `rust-analyzer`, шрифты, clangd, Rust-тулчейн и cargo-реестр —
 их повторять не нужно.
 
-### ripgrep + fd (греп и поиск файлов в пикере)
+### ripgrep + fd + lazygit (греп, поиск файлов, git-TUI)
 
-Если в пикере греп падает с `Failed to spawn rg` — на машине нет `rg`. Это признак
+Если в пикере греп падает с `Failed to spawn rg` — на машине нет `rg`. Если не работает
+`<leader>gg` — нет `lazygit`: LazyVim вешает эту клавишу только когда бинарь есть в `PATH`. Это признак
 бандла, собранного до появления шага с ripgrep/fd. Пересобирать весь `dist/` не надо:
 это готовые static-musl бинарники, они не зависят от glibc и никак не связаны с
 контейнерной сборкой.
@@ -225,7 +228,9 @@ curl -fsSL https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgre
   | tar xz -O --wildcards '*/rg' > dist/bin/rg
 curl -fsSL https://github.com/sharkdp/fd/releases/download/v10.2.0/fd-v10.2.0-x86_64-unknown-linux-musl.tar.gz \
   | tar xz -O --wildcards '*/fd' > dist/bin/fd
-chmod +x dist/bin/rg dist/bin/fd
+curl -fsSL https://github.com/jesseduffield/lazygit/releases/download/v0.63.1/lazygit_0.63.1_Linux_x86_64.tar.gz \
+  | tar xz -O lazygit > dist/bin/lazygit
+chmod +x dist/bin/rg dist/bin/fd dist/bin/lazygit
 ```
 Перенести каталог репозитория на целевую машину (или просто скопировать туда эти два файла).
 
@@ -233,7 +238,7 @@ chmod +x dist/bin/rg dist/bin/fd
 ```bash
 bash install/install-tools.sh              # или: sudo bash install/install-tools.sh system
 ```
-Скрипт инкрементальный — кладёт `rg` и `fd` в `~/.local/bin` (или `/usr/local/bin`
+Скрипт инкрементальный — кладёт `rg`, `fd` и `lazygit` в `~/.local/bin` (или `/usr/local/bin`
 в режиме `system`) и больше ничего не трогает. Если каталог уже был в `PATH`
 запущенного nvim, греп заработает без перезапуска (он спавнит `rg` заново на каждый
 ввод); если `PATH` дописывался в `~/.bashrc` только что — нужен новый терминал.

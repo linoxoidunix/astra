@@ -24,7 +24,7 @@ tar xzf "$DIST/lazyvim-data.tar.gz"   -C ~/.local/share
 say "rust-analyzer → ~/.local/bin"
 install -m755 "$DIST/bin/rust-analyzer" ~/.local/bin/rust-analyzer
 
-for tool in rg fd; do   # ripgrep (<leader>sg/sG греп) и fd (<leader>ff поиск файлов)
+for tool in rg fd lazygit; do   # rg — греп (<leader>sg/sG), fd — поиск файлов (<leader>ff), lazygit — git-TUI (<leader>gg)
     [ -f "$DIST/bin/$tool" ] && { install -m755 "$DIST/bin/$tool" ~/.local/bin/$tool; say "$tool → ~/.local/bin"; }
 done
 
