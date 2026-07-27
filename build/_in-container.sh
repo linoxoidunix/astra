@@ -132,6 +132,20 @@ git clone --depth 1 https://github.com/LazyVim/starter "$HOME/.config/nvim"
 rm -rf "$HOME/.config/nvim/.git"
 mkdir -p "$HOME/.config/nvim/lua/plugins"
 
+# Стартовый конфиг рассчитан на машину с интернетом. checker.enabled = true —
+# это git fetch по каждому из полусотни плагинов на старте и раз в час: офлайн
+# только висящие процессы и ошибки. rocks — luarocks/hererocks lazy.nvim при
+# случае качает из сети, а плагины с .rockspec в комплекте есть (nvim-dap,
+# plenary, gitsigns…). Те же правки умеют делать установщики
+# (install/_offline-lazy-cfg.sh) — для бандлов, собранных до этого места.
+sed -i 's|enabled = true, -- check for plugin updates periodically|enabled = false, -- офлайн: не ходим за обновлениями (иначе git fetch на github)|' \
+    "$HOME/.config/nvim/lua/config/lazy.lua"
+sed -i 's|^  install = { colorscheme = .*|\&\n  rocks = { enabled = false }, -- офлайн: luarocks/hererocks скачать неоткуда|' \
+    "$HOME/.config/nvim/lua/config/lazy.lua"
+grep -q 'enabled = false, -- офлайн' "$HOME/.config/nvim/lua/config/lazy.lua" \
+    && grep -q 'rocks = { enabled = false }' "$HOME/.config/nvim/lua/config/lazy.lua" \
+    || { echo "ОШИБКА: не удалось выключить checker/rocks в lua/config/lazy.lua" >&2; exit 1; }
+
 # Экстры подключаем через lazyvim.json — это штатный механизм :LazyExtras. Его
 # импортирует сам модуль lazyvim.plugins, поэтому порядок получается правильный:
 # lazyvim.plugins → extras → plugins. Если писать { import = "lazyvim.plugins.extras..." }

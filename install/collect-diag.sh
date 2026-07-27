@@ -97,6 +97,13 @@ fi
 # --- 6. сторона nvim: доехали ли спеки комплекта ----------------------------
 CFG="$HOME/.config/nvim"
 p SPECS "$(ls "$CFG/lua/plugins" 2>/dev/null | sed 's/^astra-//; s/\.lua$//' | tr '\n' ' ')"
+# plugins < lock — плагинов под спеки нет, lazy.nvim пойдёт за ними на github
+# (типично после установки новой версии поверх старой); id — отпечаток бандла:
+# home != skel значит обёртка ещё не переложила плагины, запусти nvim
+SKELD=/opt/astra-dev/skel
+p PLUGINS "home=$(ls "$HOME/.local/share/nvim/lazy" 2>/dev/null | wc -l) lock=$(grep -c '"commit"' "$CFG/lazy-lock.json" 2>/dev/null || echo 0) skel=$(ls "$SKELD/.local/share/nvim/lazy" 2>/dev/null | wc -l)"
+p BUNDLE-ID "home=$(cat "$HOME/.local/share/nvim/.astra-bundle-id" 2>/dev/null || echo none) skel=$(cat "$SKELD/.local/share/nvim/.astra-bundle-id" 2>/dev/null || echo none)"
+p LAZY-NET "checker=$(grep -A1 'checker = {' "$CFG/lua/config/lazy.lua" 2>/dev/null | grep -o 'enabled = [a-z]*' | cut -d' ' -f3) rocks=$(grep -o 'rocks = { enabled = [a-z]*' "$CFG/lua/config/lazy.lua" 2>/dev/null | grep -o '[a-z]*$')"
 p EXTRAS-L "$([ -f "$CFG/lua/plugins/extras.lua" ] && echo present-OLD || echo absent-ok)"
 p LZJSON "$(grep -c 'lazyvim.plugins.extras' "$CFG/lazyvim.json" 2>/dev/null || echo 0) extras, ver=$(grep -oE '"version":[ ]*[0-9]+' "$CFG/lazyvim.json" 2>/dev/null | tr -dc '0-9')"
 p BLINK-SP "$([ -f "$CFG/lua/plugins/astra-blink-offline.lua" ] && grep -o 'implementation = "[a-z_]*"' "$CFG/lua/plugins/astra-blink-offline.lua" || echo no-spec)"

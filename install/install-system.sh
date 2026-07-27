@@ -27,6 +27,8 @@ DIST="${DIST_ARG:-$ROOT/dist}"
 PREFIX=/opt/astra-dev          # разделяемые файлы (nvim, seed)
 SKEL="$PREFIX/skel"            # заготовка домашки пользователя
 say(){ printf '\n\033[1m==> %s\033[0m\n' "$*"; }
+# offline_lazy_cfg (правки lazy.lua под офлайн) + bundle_id (отпечаток бандла)
+. "$HERE/_offline-lazy-cfg.sh"
 
 [ -f "$DIST/nvim.tar.gz" ] || { echo "Нет собранного dist/ (ожидался $DIST). Сначала ./build/build-all.sh на хосте."; exit 1; }
 
@@ -99,6 +101,35 @@ if [ ! -e "\$HOME/.config/nvim" ] && [ -d "\$SKEL/.config/nvim" ]; then
     cp -a "\$SKEL/.config/nvim"       "\$HOME/.config/nvim"
     cp -a "\$SKEL/.local/share/nvim"  "\$HOME/.local/share/nvim"
 fi
+# Комплект обновился — перекладываем плагины тем, у кого домашка уже была.
+# Без этого установка новой версии ПОВЕРХ старой ломает nvim: установщик
+# дописывает новые экстры в lazyvim.json домашки, а плагинов под них в
+# ~/.local/share/nvim/lazy нет — lazy.nvim лезет за ними на github и офлайн
+# сыплет ошибками на каждом старте.
+# Каталог lazy целиком принадлежит комплекту: офлайн поставить туда своё
+# всё равно неоткуда, поэтому заменяем его целиком, а не сливаем.
+SRC_ID="\$(cat "\$SKEL/.local/share/nvim/.astra-bundle-id" 2>/dev/null)"
+DST_ID="\$(cat "\$HOME/.local/share/nvim/.astra-bundle-id" 2>/dev/null)"
+if [ -n "\$SRC_ID" ] && [ "\$SRC_ID" != "\$DST_ID" ]; then
+    echo "astra-dev: комплект обновился — перекладываю плагины LazyVim..." >&2
+    # каталога данных может не быть вовсе (домашку чистили руками) — заведём
+    mkdir -p "\$HOME/.local/share/nvim"
+    rm -rf "\$HOME/.local/share/nvim/lazy.new" "\$HOME/.local/share/nvim/lazy.old"
+    if cp -a "\$SKEL/.local/share/nvim/lazy" "\$HOME/.local/share/nvim/lazy.new"; then
+        mv "\$HOME/.local/share/nvim/lazy" "\$HOME/.local/share/nvim/lazy.old" 2>/dev/null
+        mv "\$HOME/.local/share/nvim/lazy.new" "\$HOME/.local/share/nvim/lazy"
+        rm -rf "\$HOME/.local/share/nvim/lazy.old"
+        # версии плагинов в замке — от нового бандла; кэш скомпилированного lua
+        # держит модули уже удалённых плагинов, поэтому сносим (соберётся заново)
+        cp -f "\$SKEL/.config/nvim/lazy-lock.json" "\$HOME/.config/nvim/lazy-lock.json" 2>/dev/null || true
+        rm -rf "\$HOME/.cache/nvim"
+        echo "\$SRC_ID" > "\$HOME/.local/share/nvim/.astra-bundle-id"
+        echo "astra-dev: готово." >&2
+    else
+        rm -rf "\$HOME/.local/share/nvim/lazy.new"
+        echo "astra-dev: не удалось переложить плагины (нет места?), оставил как было." >&2
+    fi
+fi
 # Спеки комплекта (lua/plugins/astra-*.lua) — управляемые: подтягиваются при КАЖДОМ
 # запуске, поэтому правка в skel доезжает и до тех, кто nvim уже запускал.
 # Всё остальное в lua/plugins — личное пользователя, не трогаем.
@@ -120,6 +151,12 @@ say "LazyVim config+плагины → $SKEL (заготовка для поль
 rm -rf "$SKEL/.config/nvim" "$SKEL/.local/share/nvim"
 tar xzf "$DIST/lazyvim-config.tar.gz" -C "$SKEL/.config"
 tar xzf "$DIST/lazyvim-data.tar.gz"   -C "$SKEL/.local/share"
+offline_lazy_cfg "$SKEL/.config/nvim/lua/config/lazy.lua"
+# из skel читают обычные пользователи — права из архива могут быть уже
+chmod -R a+rX "$SKEL"
+# Отпечаток бандла кладём рядом с плагинами: обёртка сравнивает его с копией
+# в домашке и по расхождению перекладывает плагины (см. ниже).
+bundle_id "$DIST" > "$SKEL/.local/share/nvim/.astra-bundle-id"
 
 # --- миграция домашек: экстры LazyVim → lazyvim.json ------------------------
 # Раньше экстры подключались импортами из lua/plugins/extras.lua. Файл лежит в
@@ -132,23 +169,30 @@ tar xzf "$DIST/lazyvim-data.tar.gz"   -C "$SKEL/.local/share"
 # не разбирая JSON (формат файла LazyVim переписывает по-своему).
 EXTRAS=$(grep -o '"lazyvim\.plugins\.extras\.[^"]*"' \
     "$SKEL/.config/nvim/lazyvim.json" 2>/dev/null | tr -d '"' | tr '\n' ' ')
-if [ -n "$EXTRAS" ]; then
-    say "Экстры LazyVim → lazyvim.json в домашках (миграция с lua/plugins/extras.lua)"
-    for home in /root /home/*; do
-        cfg="$home/.config/nvim"
-        [ -d "$cfg" ] || continue
-        # старый спек комплекта с импортами экстр — теперь лишний и вредный
-        if [ -f "$cfg/lua/plugins/extras.lua" ] \
-           && grep -q 'lazyvim\.plugins\.extras\.' "$cfg/lua/plugins/extras.lua"; then
-            rm -f "$cfg/lua/plugins/extras.lua"
-        fi
+say "Правки в уже существующих домашках (экстры + офлайн-настройки lazy.nvim)"
+for home in /root /home/*; do
+    cfg="$home/.config/nvim"
+    [ -d "$cfg" ] || continue
+    # старый спек комплекта с импортами экстр — теперь лишний и вредный
+    if [ -f "$cfg/lua/plugins/extras.lua" ] \
+       && grep -q 'lazyvim\.plugins\.extras\.' "$cfg/lua/plugins/extras.lua"; then
+        rm -f "$cfg/lua/plugins/extras.lua"
+    fi
+    # checker/rocks в конфиге домашки: у тех, кто ставился ранней версией,
+    # lazy.nvim до сих пор ходит на github за обновлениями на каждом старте.
+    # sed -i пересоздаёт файл от root — возвращаем владельца по каталогу.
+    offline_lazy_cfg "$cfg/lua/config/lazy.lua"
+    chown --reference="$cfg" "$cfg/lua/config/lazy.lua" 2>/dev/null || true
+    # плагины под новые экстры перекладывает обёртка при следующем запуске nvim
+    # (по .astra-bundle-id) — здесь только сам список экстр
+    if [ -n "$EXTRAS" ]; then
         # shellcheck disable=SC2086
         "$NVIM_REAL" --headless -l "$HERE/_merge-extras.lua" "$cfg/lazyvim.json" $EXTRAS \
             >/dev/null 2>&1 || continue
         chown --reference="$cfg" "$cfg/lazyvim.json" 2>/dev/null || true
-        echo "  $cfg/lazyvim.json"
-    done
-fi
+    fi
+    echo "  $cfg"
+done
 
 # --- Nerd Font → /usr/share/fonts ------------------------------------------
 say "Nerd Font → /usr/share/fonts/astra-nerd"

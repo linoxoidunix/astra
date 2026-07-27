@@ -6,6 +6,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$HERE")"
 DIST="${1:-$ROOT/dist}"
 say(){ printf '\n\033[1m==> %s\033[0m\n' "$*"; }
+# offline_lazy_cfg (правки lazy.lua под офлайн) + bundle_id (отпечаток бандла)
+. "$HERE/_offline-lazy-cfg.sh"
 
 [ -f "$DIST/nvim.tar.gz" ] || { echo "Нет собранного dist/ (ожидался $DIST). Сначала ./build/build-all.sh на хосте."; exit 1; }
 
@@ -20,6 +22,10 @@ say "LazyVim: конфиг + плагины (перезапись)"
 rm -rf ~/.config/nvim ~/.local/share/nvim ~/.local/state/nvim ~/.cache/nvim
 tar xzf "$DIST/lazyvim-config.tar.gz" -C ~/.config
 tar xzf "$DIST/lazyvim-data.tar.gz"   -C ~/.local/share
+offline_lazy_cfg ~/.config/nvim/lua/config/lazy.lua
+# отпечаток бандла — тем же способом, что у системной установки: если поверх
+# ляжет install-system.sh с тем же dist, обёртка не станет перекладывать плагины
+bundle_id "$DIST" > ~/.local/share/nvim/.astra-bundle-id
 
 say "rust-analyzer → ~/.local/bin"
 install -m755 "$DIST/bin/rust-analyzer" ~/.local/bin/rust-analyzer
