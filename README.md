@@ -13,6 +13,7 @@
 | rust-analyzer (Rust LSP) | собирается из исходников |
 | codelldb (отладчик C/C++/Rust) + nvim-dap | готовый vsix, целиком со своим lldb |
 | lazygit (git-TUI на `<leader>gg`) | статический бинарь, от glibc не зависит |
+| git (свой, 2.55) | собирается под glibc 2.28; в Astra ~2.20, а lazygit требует ≥ 2.32 |
 | Node.js 20 + vtsls (TS/JS LSP) | Node LTS под glibc 2.28 + `npm i` vtsls/typescript |
 | treesitter-парсеры (rust/cpp/c/cmake/js/ts/tsx/…) | компилятся из грамматик под 2.28 |
 | JetBrainsMono Nerd Font | из nerd-fonts |
@@ -38,6 +39,7 @@ GitHub Release** (готовое, ничего собирать не надо), 
     ├── node.tar.gz            # Node.js 20 (для TS/JS LSP)
     ├── ts-lsp.tar.gz          # vtsls + typescript
     ├── codelldb.tar.gz        # отладчик C/C++/Rust (адаптер + свой lldb)
+    ├── git.tar.gz             # свой git 2.55 (lazygit не стартует на < 2.32)
     ├── lazyvim-config.tar.gz
     ├── lazyvim-data.tar.gz
     ├── fonts.tar.gz
@@ -269,6 +271,45 @@ bash install/install-tools.sh              # или: sudo bash install/install-t
 в режиме `system`) и больше ничего не трогает. Если каталог уже был в `PATH`
 запущенного nvim, греп заработает без перезапуска (он спавнит `rg` заново на каждый
 ввод); если `PATH` дописывался в `~/.bashrc` только что — нужен новый терминал.
+
+### Свой git (lazygit требует ≥ 2.32)
+
+Если `<leader>gg` открывается и сразу гаснет с
+
+```
+Git version must be at least 2.32.0. Please upgrade your git version.
+```
+
+значит на машине git старее 2.32. Это не баг комплекта: минимум прописан в самом
+lazygit (`pkg/app/app.go`, `minGitVersionStr = "2.32.0"`), а в репозитории Astra 1.7
+лежит buster-овский ~2.20. Проверить: `git --version`, `apt-cache policy git`.
+
+Обновлять git через `apt` из чужого репозитория **не надо** — потянет за собой glibc.
+Комплект собирает свой git под ту же glibc 2.28 и кладёт его рядом с остальным:
+
+```bash
+bash install/install-git.sh              # для себя → ~/.local/git
+sudo bash install/install-git.sh system  # для всех → /opt/astra-dev/git
+```
+
+Системный `/usr/bin/git` при этом **не трогается**: dpkg-состояние не меняется, наш
+git просто стоит раньше в `PATH`. Откат — удалить каталог и симлинки (скрипт
+печатает готовую команду).
+
+Особенности сборки (см. `build/_in-container.sh`):
+
+| Флаг | Зачем |
+|---|---|
+| `NO_RUST=1` | с 2.55 часть git на Rust и тянет `cargo`; в buster rustc 1.41, git хочет ≥ 1.49. До **Git 3.0** отключаемо, дальше шаг сборки git придётся переставить после установки rustup |
+| `NO_CURL=1 NO_EXPAT=1` | транспорты http(s) офлайн не нужны; ssh и локальные пути работают |
+| `NO_GETTEXT=1 NO_OPENSSL=1` | сообщения на английском, свой SHA — меньше зависимостей: остаются только `libz` и `libc` |
+| `RUNTIME_PREFIX=YesPlease` | git ищет `libexec/git-core` и шаблоны рядом с бинарём, поэтому дерево кладётся хоть в `/opt/astra-dev/git`, хоть в `~/.local/git` |
+
+Оборотная сторона `RUNTIME_PREFIX`: общесистемный конфиг ищется не в `/etc/gitconfig`,
+а в `<префикс>/etc/gitconfig`. Установщики поэтому ставят туда симлинк на `/etc/gitconfig`
+— иначе настройки Astra (прокси, `safe.directory`) молча перестали бы действовать.
+
+Дерево после `strip` — 19 МБ (архив ~9 МБ); без `strip` было бы 106 МБ.
 
 ### Отладчик codelldb (C/C++/Rust)
 

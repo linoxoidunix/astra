@@ -34,6 +34,18 @@ for tool in rg fd lazygit; do   # rg — греп (<leader>sg/sG), fd — пои
     [ -f "$DIST/bin/$tool" ] && { install -m755 "$DIST/bin/$tool" ~/.local/bin/$tool; say "$tool → ~/.local/bin"; }
 done
 
+if [ -f "$DIST/git.tar.gz" ]; then   # свой git: в Astra ~2.20, а lazygit требует >= 2.32
+    say "git → ~/.local/git (системный /usr/bin/git не трогаем)"
+    rm -rf ~/.local/git
+    tar xzf "$DIST/git.tar.gz" -C ~/.local
+    for exe in ~/.local/git/bin/*; do
+        [ -x "$exe" ] && ln -sf "$exe" ~/.local/bin/"${exe##*/}"
+    done
+    # с RUNTIME_PREFIX системный конфиг ищется в <префикс>/etc/gitconfig
+    [ -f /etc/gitconfig ] && { mkdir -p ~/.local/git/etc; ln -sf /etc/gitconfig ~/.local/git/etc/gitconfig; }
+    ~/.local/git/bin/git --version
+fi
+
 if [ -f "$DIST/codelldb.tar.gz" ]; then   # отладчик C/C++/Rust (nvim-dap, <leader>dc)
     say "codelldb → ~/.local/codelldb"
     rm -rf ~/.local/codelldb

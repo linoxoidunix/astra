@@ -60,6 +60,24 @@ for tool in rg fd lazygit; do
     [ -f "$DIST/bin/$tool" ] && { say "$tool → /usr/local/bin"; install -m755 "$DIST/bin/$tool" /usr/local/bin/$tool; }
 done
 
+# --- git → /opt/astra-dev/git + симлинки в /usr/local/bin -------------------
+# В Astra 1.7 git ~2.20, а lazygit требует >= 2.32 («Git version must be at
+# least 2.32.0»). Системный /usr/bin/git не трогаем: наш просто раньше в PATH.
+if [ -f "$DIST/git.tar.gz" ]; then
+    say "git → $PREFIX/git (системный /usr/bin/git не трогаем)"
+    rm -rf "$PREFIX/git"
+    tar xzf "$DIST/git.tar.gz" -C "$PREFIX"
+    for exe in "$PREFIX"/git/bin/*; do
+        [ -x "$exe" ] && ln -sf "$exe" "/usr/local/bin/${exe##*/}"
+    done
+    # с RUNTIME_PREFIX системный конфиг ищется в <префикс>/etc/gitconfig —
+    # без ссылки общесистемные настройки Astra перестали бы действовать
+    if [ -f /etc/gitconfig ]; then
+        mkdir -p "$PREFIX/git/etc" && ln -sf /etc/gitconfig "$PREFIX/git/etc/gitconfig"
+    fi
+    "$PREFIX/git/bin/git" --version
+fi
+
 # --- codelldb (отладчик C/C++/Rust) → /opt/astra-dev + /usr/local/bin -------
 # Кладём деревом: спек astra-dap.lua находит liblldb рядом с адаптером,
 # разыменовав симлинк из /usr/local/bin.

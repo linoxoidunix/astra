@@ -19,6 +19,7 @@ RG_VER="${RG_VER:-14.1.1}"          # ripgrep для LazyVim-грепа (<leader
 FD_VER="${FD_VER:-10.2.0}"          # fd для файлового пикера (<leader>ff); static-musl, без glibc
 CODELLDB_VER="${CODELLDB_VER:-v1.12.2}"  # отладчик C/C++/Rust (DAP-адаптер + свой lldb)
 LAZYGIT_VER="${LAZYGIT_VER:-0.63.1}"     # git-TUI для <leader>gg; статический Go-бинарь
+GIT_VER="${GIT_VER:-2.55.0}"             # свой git: в Astra 1.7 ~2.20, а lazygit требует >= 2.32
 TS_LANGS="${TS_LANGS:-c cpp cmake rust lua luadoc vim vimdoc query markdown markdown_inline bash json yaml toml regex printf gitcommit diff javascript typescript tsx jsdoc html css}"
 
 DIST=/out
@@ -33,7 +34,8 @@ echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check
 apt-get update
 apt-get install -y --no-install-recommends \
     build-essential gettext libtool-bin autoconf automake pkg-config \
-    git curl wget ca-certificates unzip xz-utils file libssl-dev ninja-build
+    git curl wget ca-certificates unzip xz-utils file libssl-dev ninja-build \
+    zlib1g-dev perl
 
 log "CMake ${CMAKE_VER}"
 curl -fsSL -o /tmp/cmake.tgz \
@@ -92,6 +94,41 @@ curl -fsSL -o /tmp/lazygit.tgz \
 tar xzf /tmp/lazygit.tgz -C /tmp lazygit
 mv /tmp/lazygit "$DIST/bin/lazygit"
 "$DIST/bin/lazygit" --version
+
+# ---------------------------------------------------------------- git
+# В Astra 1.7 git из репозитория — buster-овский (~2.20), а lazygit с версии
+# 0.4x требует >= 2.32 и просто отказывается стартовать:
+#   "Git version must be at least 2.32.0. Please upgrade your git version."
+# Собираем свой и кладём рядом с остальным комплектом — системный /usr/bin/git
+# при этом не трогается (важно для сертифицированной ОС): установщики только
+# ставят симлинк в PATH перед ним.
+#
+# NO_RUST: с 2.55 часть git пишется на Rust и по умолчанию требует cargo (в
+#   buster rustc 1.41, git хочет >= 1.49). До Git 3.0 это отключаемо — дальше
+#   шаг придётся переставить ПОСЛЕ установки rustup выше.
+# NO_CURL/NO_EXPAT: транспорты http(s) офлайн не нужны; ssh и локальные пути
+#   работают. NO_GETTEXT: сообщения на английском, зато нет зависимости от
+#   libintl. NO_OPENSSL: свой SHA-1/SHA-256 вместо libcrypto.
+# RUNTIME_PREFIX: git ищет libexec/git-core и шаблоны рядом с бинарём, поэтому
+#   дерево можно разложить и в /opt/astra-dev/git, и в ~/.local/git.
+log "git ${GIT_VER} (свой, glibc 2.28)"
+curl -fsSL -o /tmp/git.tar.gz \
+  "https://mirrors.edge.kernel.org/pub/software/scm/git/git-${GIT_VER}.tar.gz"
+mkdir -p /tmp/gitsrc && tar xzf /tmp/git.tar.gz -C /tmp/gitsrc --strip-components=1
+GIT_MAKE_OPTS="NO_RUST=1 NO_CURL=1 NO_EXPAT=1 NO_GETTEXT=1 NO_TCLTK=1 NO_OPENSSL=1
+               RUNTIME_PREFIX=YesPlease gitexecdir=libexec/git-core"
+# shellcheck disable=SC2086
+make -C /tmp/gitsrc -j"$(nproc)" prefix=/opt/astra-dev/git $GIT_MAKE_OPTS >/tmp/git-build.log 2>&1 \
+    || { tail -30 /tmp/git-build.log; echo "ОШИБКА: не собрался git ${GIT_VER}" >&2; exit 1; }
+# shellcheck disable=SC2086
+make -C /tmp/gitsrc prefix=/opt/astra-dev/git $GIT_MAKE_OPTS DESTDIR="$DIST/gitroot" install \
+    >>/tmp/git-build.log 2>&1
+mv "$DIST/gitroot/opt/astra-dev/git" "$DIST/git" && rm -rf "$DIST/gitroot"
+# без strip дерево 106 МБ (архив 41), после — 19 МБ (архив 9)
+find "$DIST/git" -type f -exec sh -c \
+    'file "$1" | grep -q "ELF.*not stripped" && strip --strip-unneeded "$1"' _ {} \; 2>/dev/null
+"$DIST/git/bin/git" --version
+echo "git: $(du -sh "$DIST/git" | cut -f1)"
 
 # ---------------------------------------------------------------- codelldb (отладчик)
 # Готовый vsix, а не сборка из исходников: собирать codelldb — это тянуть в контейнер
@@ -471,6 +508,7 @@ tar czf "$DIST/nvim.tar.gz"           -C "$DIST" nvim && rm -rf "$DIST/nvim"
 tar czf "$DIST/node.tar.gz"           -C "$DIST" node && rm -rf "$DIST/node"
 tar czf "$DIST/ts-lsp.tar.gz"         -C "$DIST" ts-lsp && rm -rf "$DIST/ts-lsp"
 tar czf "$DIST/codelldb.tar.gz"       -C "$DIST" codelldb && rm -rf "$DIST/codelldb"
+tar czf "$DIST/git.tar.gz"            -C "$DIST" git && rm -rf "$DIST/git"
 tar czf "$DIST/lazyvim-config.tar.gz" -C "$HOME/.config" nvim
 tar czf "$DIST/lazyvim-data.tar.gz"   -C "$HOME/.local/share" nvim
 ( cd "$DIST/fonts" && tar czf "$DIST/fonts.tar.gz" ./*.ttf ) && rm -rf "$DIST/fonts"
