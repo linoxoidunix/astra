@@ -63,7 +63,7 @@ gh release download v0.2.0 --repo <владелец>/<репозиторий> -p
 ```bash
 mkdir -p dist/bin
 base=<адрес-релиза>          # .../releases/download/v0.2.0
-for f in nvim node ts-lsp codelldb lazyvim-config lazyvim-data fonts parsers; do
+for f in nvim node ts-lsp codelldb git lazyvim-config lazyvim-data fonts parsers; do
   curl -fL -o dist/$f.tar.gz $base/$f.tar.gz
 done
 for b in rust-analyzer rg fd lazygit; do
@@ -285,8 +285,16 @@ lazygit (`pkg/app/app.go`, `minGitVersionStr = "2.32.0"`), а в репозит�
 лежит buster-овский ~2.20. Проверить: `git --version`, `apt-cache policy git`.
 
 Обновлять git через `apt` из чужого репозитория **не надо** — потянет за собой glibc.
-Комплект собирает свой git под ту же glibc 2.28 и кладёт его рядом с остальным:
+Комплект собирает свой git под ту же glibc 2.28 и кладёт его рядом с остальным.
+Пересобирать весь `dist/` ради него не надо — это отдельный ассет (~9 МБ).
 
+**На машине с интернетом:**
+```bash
+gh release download v0.2.0 --repo <владелец>/<репозиторий> --clobber -D dist/ -p 'git.tar.gz'
+```
+Перенести каталог репозитория на целевую машину.
+
+**На целевой машине:**
 ```bash
 bash install/install-git.sh              # для себя → ~/.local/git
 sudo bash install/install-git.sh system  # для всех → /opt/astra-dev/git
