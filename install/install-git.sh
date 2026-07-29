@@ -19,6 +19,8 @@ ROOT="$(dirname "$HERE")"
 DIST="${DIST:-$ROOT/dist}"
 MODE="${1:-user}"
 say(){ printf '\n\033[1m==> %s\033[0m\n' "$*"; }
+. "$HERE/_path-setup.sh"   # ensure_user_path
+. "$HERE/_verify.sh"       # verify_bin, verify_git_transport
 
 [ -f "$DIST/git.tar.gz" ] || {
     echo "Нет $DIST/git.tar.gz — собери ./build/build-all.sh или скачай ассет из Release."; exit 1; }
@@ -52,15 +54,26 @@ if [ -f /etc/gitconfig ]; then
     say "системный /etc/gitconfig подключён"
 fi
 
+# Симлинков мало: если $BIN не стоит в PATH раньше /usr/bin, `git` останется
+# системным и lazygit так же откажется стартовать. В user-режиме правим PATH
+# сами; в system-режиме /usr/local/bin уже раньше /usr/bin в /etc/profile
+# (и install-system.sh кладёт /etc/profile.d/astra-dev.sh на случай, когда нет).
+if [ "$MODE" != system ]; then
+    say "PATH → ~/.bashrc, ~/.profile"
+    ensure_user_path
+fi
+
 say "Проверка"
-"$BIN/git" --version
-"$BIN/git" --exec-path
+"$PREFIX/git/bin/git" --version
+"$PREFIX/git/bin/git" --exec-path
+verify_bin git "$PREFIX/git/bin/git" || true
+verify_git_transport "$PREFIX/git" || true
 
 cat <<EOF
 
-Готово. Системный $(command -v git 2>/dev/null || echo /usr/bin/git) не тронут —
-наш стоит раньше в PATH. Проверь в НОВОМ терминале:
-  command -v git && git --version      # → $BIN/git, $("$BIN/git" --version | awk '{print $3}')
+Готово. Системный /usr/bin/git не тронут — наш просто стоит раньше в PATH.
+В ТЕКУЩЕМ терминале PATH ещё старый; проверь в новом (или \`exec bash -l\`):
+  command -v git && git --version      # → $BIN/git, $("$PREFIX/git/bin/git" --version | awk '{print $3}')
 
 Откат: rm -rf $PREFIX/git && rm -f $BIN/git $BIN/git-* $BIN/scalar
 EOF

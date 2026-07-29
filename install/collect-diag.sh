@@ -51,7 +51,8 @@ p CLANGD "$(have clangd && ver clangd || echo NONE)"
 # lazygit не стартует на git < 2.32 («Git version must be at least 2.32.0»);
 # в репозитории Astra 1.7 лежит ~2.20, свой ставится install-git.sh
 p GIT "$(have git && ver git || echo NONE)"
-p GIT-PATH "$(short "$(command -v git 2>/dev/null || echo NONE)")"
+# [xN] — сколько git'ов в PATH: при N>1 важно, что выигрывает наш, а не /usr/bin
+p GIT-PATH "$(short "$(command -v git 2>/dev/null || echo NONE)") [x$(which -a git 2>/dev/null | wc -l)]"
 
 # --- 2. sysroot: без исходников std rust-analyzer не выведет Future::Output --
 SYSROOT="$(rustc --print sysroot 2>/dev/null)"

@@ -304,13 +304,67 @@ sudo bash install/install-git.sh system  # для всех → /opt/astra-dev/gi
 git просто стоит раньше в `PATH`. Откат — удалить каталог и симлинки (скрипт
 печатает готовую команду).
 
+**`git --version` показывает старую версию после установки.** Симлинков в
+`~/.local/bin` мало — этот каталог должен стоять в `PATH` **раньше** `/usr/bin`,
+иначе выигрывает системный git. Дописывание в конец (`PATH="$PATH:$HOME/.local/bin"`,
+именно так делает дебиановский `~/.profile` и многие готовые `~/.bashrc`) задачу
+не решает. Установщики правят это сами — блок между маркерами
+`# >>> astra-dev-setup PATH >>>` в `~/.bashrc` и `~/.profile`; в конце они печатают,
+какой git реально выигрывает, и ругаются, если не наш. Что проверить, если версия
+всё равно старая:
+
+```bash
+exec bash -l                 # в текущем терминале PATH ещё старый
+command -v git               # → ~/.local/bin/git (а не /usr/bin/git)
+which -a git                 # кто ещё лежит в PATH раньше
+grep -n 'astra-dev-setup PATH' ~/.bashrc ~/.profile
+```
+
+Частые причины: терминал не перезапущен (`hash -r` или новый); nvim запущен из
+меню рабочего стола, а не из терминала — тогда `~/.bashrc` не читается вовсе,
+и спасает как раз блок в `~/.profile`; в `/usr/local/bin` остался `git` от старой
+установки в режиме `system` (`sudo rm -f /usr/local/bin/git /usr/local/bin/git-* /usr/local/bin/scalar`).
+
+**`git push`/`git fetch` по https не работает.** Симптом:
+
+```
+fatal: Unable to find remote helper for 'https'
+```
+
+Это не про сеть и не про доступы: git собирался с `NO_CURL=1`, поэтому
+`git-remote-http` и `git-remote-https` в комплект вообще не попали. Проверить:
+
+```bash
+ls ~/.local/git/libexec/git-core/ | grep remote     # должны быть git-remote-http(s)
+```
+
+Исправлено в сборке — нужен **свежий `git.tar.gz`** (пересобрать или скачать новый
+ассет), после чего `bash install/install-git.sh`. Установщик теперь сам проверяет
+транспорт и ругается, если helper'а нет или не хватает `libcurl.so.4`.
+
+Новая зависимость на целевой машине — `libcurl4` (плюс её собственные krb5/ldap/
+gnutls/nghttp2, они приезжают вместе с ней одним пакетом). Это штатный пакет из
+репозитория Astra 1.7, тянуть ничего постороннего не надо и glibc он не трогает;
+обычно уже стоит — его требуют `curl`, `wget`, `apt-transport-https`. Если вдруг нет:
+
+```bash
+sudo apt install -y libcurl4
+```
+
+Пока не пересобран — временный обход через ssh-удалёнку (ssh-транспорт встроен в
+сам `git` и от libcurl не зависит, поэтому работает и на старом бандле):
+
+```bash
+git remote set-url origin git@<хост>:<группа>/<репо>.git
+```
+
 Особенности сборки (см. `build/_in-container.sh`):
 
 | Флаг | Зачем |
 |---|---|
 | `NO_RUST=1` | с 2.55 часть git на Rust и тянет `cargo`; в buster rustc 1.41, git хочет ≥ 1.49. До **Git 3.0** отключаемо, дальше шаг сборки git придётся переставить после установки rustup |
-| `NO_CURL=1 NO_EXPAT=1` | транспорты http(s) офлайн не нужны; ssh и локальные пути работают |
-| `NO_GETTEXT=1 NO_OPENSSL=1` | сообщения на английском, свой SHA — меньше зависимостей: остаются только `libz` и `libc` |
+| curl + expat **включены** | без них не собираются `git-remote-http(s)` и любая https-удалёнка падает на `Unable to find remote helper for 'https'`. Раньше тут стояло `NO_CURL=1 NO_EXPAT=1` — это была ошибка (см. ниже) |
+| `NO_GETTEXT=1 NO_OPENSSL=1` | сообщения на английском, свой SHA — меньше зависимостей: остаются `libz`, `libcurl`, `libexpat`, `libc` |
 | `RUNTIME_PREFIX=YesPlease` | git ищет `libexec/git-core` и шаблоны рядом с бинарём, поэтому дерево кладётся хоть в `/opt/astra-dev/git`, хоть в `~/.local/git` |
 
 Оборотная сторона `RUNTIME_PREFIX`: общесистемный конфиг ищется не в `/etc/gitconfig`,

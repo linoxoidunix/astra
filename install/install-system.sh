@@ -226,7 +226,14 @@ cp "$ROOT/cargo/config.toml" "$SKEL/.cargo/config.toml"
 say "Окружение для всех → /etc/profile.d/astra-dev.sh"
 cat > /etc/profile.d/astra-dev.sh <<EOF
 # astra-dev-setup: общее окружение
-case ":\$PATH:" in *":/usr/local/bin:"*) ;; *) export PATH="/usr/local/bin:\$PATH";; esac
+# /usr/local/bin должен быть ПЕРВЫМ, а не просто присутствовать: там наш git
+# (системный /usr/bin/git ~2.20 не годится для lazygit), nvim, rust-analyzer.
+# Проверка «есть ли вообще в PATH» тут не годится — он почти всегда есть, и
+# при порядке /usr/bin:/usr/local/bin выигрывал бы системный бинарь.
+case ":\$PATH:" in
+    ":/usr/local/bin:"*) ;;                       # уже первый — не трогаем
+    *) PATH="/usr/local/bin:\$PATH"; export PATH ;;
+esac
 # засев cargo-офлайн-конфига пользователю (один раз)
 if [ ! -e "\$HOME/.cargo/config.toml" ] && [ -f "$SKEL/.cargo/config.toml" ]; then
     mkdir -p "\$HOME/.cargo" && cp "$SKEL/.cargo/config.toml" "\$HOME/.cargo/config.toml"

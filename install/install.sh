@@ -8,6 +8,8 @@ DIST="${1:-$ROOT/dist}"
 say(){ printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 # offline_lazy_cfg (правки lazy.lua под офлайн) + bundle_id (отпечаток бандла)
 . "$HERE/_offline-lazy-cfg.sh"
+. "$HERE/_path-setup.sh"   # ensure_user_path: ~/.local/bin первым в PATH
+. "$HERE/_verify.sh"       # verify_bin, verify_git_transport
 
 [ -f "$DIST/nvim.tar.gz" ] || { echo "Нет собранного dist/ (ожидался $DIST). Сначала ./build/build-all.sh на хосте."; exit 1; }
 
@@ -82,8 +84,15 @@ fc-cache -f ~/.local/share/fonts >/dev/null 2>&1 || true
 say "cargo офлайн-реестр → ~/.cargo/config.toml"
 cp "$ROOT/cargo/config.toml" ~/.cargo/config.toml
 
-say "PATH → ~/.bashrc"
-grep -q '.local/bin' ~/.bashrc 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+say "PATH → ~/.bashrc, ~/.profile"
+ensure_user_path
+
+say "Проверка PATH"
+verify_bin nvim ~/.local/bin/nvim || true
+[ -x ~/.local/git/bin/git ] && {
+    verify_bin git ~/.local/git/bin/git || true
+    verify_git_transport ~/.local/git   || true
+}
 
 cat <<'EOF'
 

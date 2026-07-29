@@ -35,7 +35,7 @@ apt-get update
 apt-get install -y --no-install-recommends \
     build-essential gettext libtool-bin autoconf automake pkg-config \
     git curl wget ca-certificates unzip xz-utils file libssl-dev ninja-build \
-    zlib1g-dev perl
+    zlib1g-dev perl libcurl4-openssl-dev libexpat1-dev
 
 log "CMake ${CMAKE_VER}"
 curl -fsSL -o /tmp/cmake.tgz \
@@ -106,8 +106,14 @@ mv /tmp/lazygit "$DIST/bin/lazygit"
 # NO_RUST: с 2.55 часть git пишется на Rust и по умолчанию требует cargo (в
 #   buster rustc 1.41, git хочет >= 1.49). До Git 3.0 это отключаемо — дальше
 #   шаг придётся переставить ПОСЛЕ установки rustup выше.
-# NO_CURL/NO_EXPAT: транспорты http(s) офлайн не нужны; ssh и локальные пути
-#   работают. NO_GETTEXT: сообщения на английском, зато нет зависимости от
+# CURL/EXPAT нужны обязательно. Без NO_CURL не собираются git-remote-http и
+#   git-remote-https, и ЛЮБАЯ работа с https-удалёнкой падает на
+#   "fatal: Unable to find remote helper for 'https'" — ни fetch, ни push.
+#   Офлайн тут ни при чём: рабочие репозитории лежат на внутреннем GitLab по
+#   https. EXPAT добавляет git-http-push (dumb-http/WebDAV) — нужен старым
+#   корпоративным серверам без smart-http. Обе библиотеки берём из buster,
+#   т.е. ровно те версии, что стоят на Astra 1.7 (libcurl.so.4, libexpat.so.1).
+# NO_GETTEXT: сообщения на английском, зато нет зависимости от
 #   libintl. NO_OPENSSL: свой SHA-1/SHA-256 вместо libcrypto.
 # RUNTIME_PREFIX: git ищет libexec/git-core и шаблоны рядом с бинарём, поэтому
 #   дерево можно разложить и в /opt/astra-dev/git, и в ~/.local/git.
@@ -115,7 +121,9 @@ log "git ${GIT_VER} (свой, glibc 2.28)"
 curl -fsSL -o /tmp/git.tar.gz \
   "https://mirrors.edge.kernel.org/pub/software/scm/git/git-${GIT_VER}.tar.gz"
 mkdir -p /tmp/gitsrc && tar xzf /tmp/git.tar.gz -C /tmp/gitsrc --strip-components=1
-GIT_MAKE_OPTS="NO_RUST=1 NO_CURL=1 NO_EXPAT=1 NO_GETTEXT=1 NO_TCLTK=1 NO_OPENSSL=1
+# curl и expat НЕ отключаем (никаких NO_CURL/NO_EXPAT) — см. комментарий выше:
+# без них нет http(s)-транспорта. Makefile git находит их сам через curl-config.
+GIT_MAKE_OPTS="NO_RUST=1 NO_GETTEXT=1 NO_TCLTK=1 NO_OPENSSL=1
                RUNTIME_PREFIX=YesPlease gitexecdir=libexec/git-core"
 # shellcheck disable=SC2086
 make -C /tmp/gitsrc -j"$(nproc)" prefix=/opt/astra-dev/git $GIT_MAKE_OPTS >/tmp/git-build.log 2>&1 \
@@ -128,6 +136,20 @@ mv "$DIST/gitroot/opt/astra-dev/git" "$DIST/git" && rm -rf "$DIST/gitroot"
 find "$DIST/git" -type f -exec sh -c \
     'file "$1" | grep -q "ELF.*not stripped" && strip --strip-unneeded "$1"' _ {} \; 2>/dev/null
 "$DIST/git/bin/git" --version
+
+# Проверка транспорта. Без неё пропажа libcurl-dev в контейнере тихо соберёт git
+# без git-remote-https, и это вылезет только на целевой машине при первом push.
+for h in git-remote-http git-remote-https; do
+    [ -x "$DIST/git/libexec/git-core/$h" ] || {
+        echo "ОШИБКА: git собран без $h — не будет работать https-удалёнка." >&2
+        echo "        Проверь, что в контейнере стоит libcurl4-openssl-dev." >&2
+        exit 1; }
+done
+# ldd -r ловит неразрешённые символы: библиотека может быть на месте, а версия не та
+ldd -r "$DIST/git/libexec/git-core/git-remote-https" 2>&1 | grep -E 'not found|undefined symbol' && {
+    echo "ОШИБКА: git-remote-https не линкуется." >&2; exit 1; }
+echo "git: транспорты — $(ls "$DIST/git/libexec/git-core" | grep '^git-remote-' | tr '\n' ' ')"
+echo "git: libcurl — $(ldd "$DIST/git/libexec/git-core/git-remote-https" | grep -o 'libcurl[^ ]*')"
 echo "git: $(du -sh "$DIST/git" | cut -f1)"
 
 # ---------------------------------------------------------------- codelldb (отладчик)
