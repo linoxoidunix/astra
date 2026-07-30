@@ -360,14 +360,34 @@ ls ~/.local/git/libexec/git-core/ | grep remote     # должны быть git-
 ассет), после чего `bash install/install-git.sh`. Установщик теперь сам проверяет
 транспорт и ругается, если helper'а нет или не хватает `libcurl.so.4`.
 
-Новая зависимость на целевой машине — `libcurl4` (плюс её собственные krb5/ldap/
-gnutls/nghttp2, они приезжают вместе с ней одним пакетом). Это штатный пакет из
-репозитория Astra 1.7, тянуть ничего постороннего не надо и glibc он не трогает;
-обычно уже стоит — его требуют `curl`, `wget`, `apt-transport-https`. Если вдруг нет:
+Единственная новая зависимость на целевой машине — `libcurl4` (её собственные
+krb5/ldap/gnutls/nghttp2 приезжают вместе с ней одним пакетом). Штатный пакет из
+репозитория Astra 1.7, glibc не трогает, обычно уже стоит — его требуют `curl`,
+`wget`, `apt-transport-https`. Если вдруг нет:
 
 ```bash
 sudo apt install -y libcurl4
 ```
+
+**Если `git-remote-https` есть, а push всё равно падает** — смотри не на список
+помощников, а на `ldd`:
+
+```bash
+ldd ~/.local/git/libexec/git-core/git-remote-https | grep 'not found'
+```
+
+Так вылезал `libexpat.so.1`: помощник собрался, но линковался с expat, которого на
+машине нет (`libcurl4` его не тянет), и падал ещё при загрузке:
+
+```
+git-remote-https: error while loading shared libraries: libexpat.so.1
+fatal: remote helper 'https' aborted session
+```
+
+Поэтому сборка теперь идёт с `NO_EXPAT=1` и проверяет **прямые** зависимости
+(`DT_NEEDED`) по белому списку — лишняя библиотека роняет сборку на хосте, а не
+вылезает у пользователя при первом push. `verify_git_transport` в установщиках
+проверяет то же самое уже на целевой машине.
 
 Пока не пересобран — временный обход через ssh-удалёнку (ssh-транспорт встроен в
 сам `git` и от libcurl не зависит, поэтому работает и на старом бандле):
@@ -381,8 +401,9 @@ git remote set-url origin git@<хост>:<группа>/<репо>.git
 | Флаг | Зачем |
 |---|---|
 | `NO_RUST=1` | с 2.55 часть git на Rust и тянет `cargo`; в buster rustc 1.41, git хочет ≥ 1.49. До **Git 3.0** отключаемо, дальше шаг сборки git придётся переставить после установки rustup |
-| curl + expat **включены** | без них не собираются `git-remote-http(s)` и любая https-удалёнка падает на `Unable to find remote helper for 'https'`. Раньше тут стояло `NO_CURL=1 NO_EXPAT=1` — это была ошибка (см. ниже) |
-| `NO_GETTEXT=1 NO_OPENSSL=1` | сообщения на английском, свой SHA — меньше зависимостей: остаются `libz`, `libcurl`, `libexpat`, `libc` |
+| curl **включён** | без него не собираются `git-remote-http(s)` и любая https-удалёнка падает на `Unable to find remote helper for 'https'`. Раньше тут стояло `NO_CURL=1` — это была ошибка (см. ниже) |
+| `NO_EXPAT=1` | expat нужен только для dumb-http (WebDAV). Smart HTTP — GitLab, GitHub, Gitea — от него не зависит, а `libcurl4` пакет `libexpat1` за собой **не тянет**: с expat помощник падал бы на машине без него ещё при загрузке |
+| `NO_GETTEXT=1 NO_OPENSSL=1` | сообщения на английском, свой SHA — меньше зависимостей: у `git-remote-https` прямые это `libcurl.so.4`, `libz.so.1`, `libpthread`, `libc` |
 | `RUNTIME_PREFIX=YesPlease` | git ищет `libexec/git-core` и шаблоны рядом с бинарём, поэтому дерево кладётся хоть в `/opt/astra-dev/git`, хоть в `~/.local/git` |
 
 Оборотная сторона `RUNTIME_PREFIX`: общесистемный конфиг ищется не в `/etc/gitconfig`,

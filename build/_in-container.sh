@@ -106,13 +106,19 @@ mv /tmp/lazygit "$DIST/bin/lazygit"
 # NO_RUST: с 2.55 часть git пишется на Rust и по умолчанию требует cargo (в
 #   buster rustc 1.41, git хочет >= 1.49). До Git 3.0 это отключаемо — дальше
 #   шаг придётся переставить ПОСЛЕ установки rustup выше.
-# CURL/EXPAT нужны обязательно. Без NO_CURL не собираются git-remote-http и
+# CURL нужен обязательно: без него не собираются git-remote-http и
 #   git-remote-https, и ЛЮБАЯ работа с https-удалёнкой падает на
 #   "fatal: Unable to find remote helper for 'https'" — ни fetch, ни push.
 #   Офлайн тут ни при чём: рабочие репозитории лежат на внутреннем GitLab по
-#   https. EXPAT добавляет git-http-push (dumb-http/WebDAV) — нужен старым
-#   корпоративным серверам без smart-http. Обе библиотеки берём из buster,
-#   т.е. ровно те версии, что стоят на Astra 1.7 (libcurl.so.4, libexpat.so.1).
+#   https. libcurl берём из buster, т.е. ровно той версии, что на Astra 1.7.
+# NO_EXPAT: expat нужен ТОЛЬКО для dumb-http (WebDAV, git-http-push и
+#   http-walker). Smart HTTP, по которому работают GitLab/GitHub/Gitea, от него
+#   не зависит. Без NO_EXPAT бинарь git-remote-https линкуется с libexpat.so.1,
+#   и на машине без пакета libexpat1 (libcurl4 его за собой НЕ тянет) падает уже
+#   при загрузке:
+#     git-remote-https: error while loading shared libraries: libexpat.so.1
+#     fatal: remote helper 'https' aborted session
+#   Отказ от dumb-http дешевле лишней зависимости: остаётся только libcurl4.
 # NO_GETTEXT: сообщения на английском, зато нет зависимости от
 #   libintl. NO_OPENSSL: свой SHA-1/SHA-256 вместо libcrypto.
 # RUNTIME_PREFIX: git ищет libexec/git-core и шаблоны рядом с бинарём, поэтому
@@ -121,9 +127,9 @@ log "git ${GIT_VER} (свой, glibc 2.28)"
 curl -fsSL -o /tmp/git.tar.gz \
   "https://mirrors.edge.kernel.org/pub/software/scm/git/git-${GIT_VER}.tar.gz"
 mkdir -p /tmp/gitsrc && tar xzf /tmp/git.tar.gz -C /tmp/gitsrc --strip-components=1
-# curl и expat НЕ отключаем (никаких NO_CURL/NO_EXPAT) — см. комментарий выше:
-# без них нет http(s)-транспорта. Makefile git находит их сам через curl-config.
-GIT_MAKE_OPTS="NO_RUST=1 NO_GETTEXT=1 NO_TCLTK=1 NO_OPENSSL=1
+# curl НЕ отключаем (никакого NO_CURL) — см. комментарий выше: без него нет
+# http(s)-транспорта. Makefile git находит его сам через curl-config.
+GIT_MAKE_OPTS="NO_RUST=1 NO_GETTEXT=1 NO_TCLTK=1 NO_OPENSSL=1 NO_EXPAT=1
                RUNTIME_PREFIX=YesPlease gitexecdir=libexec/git-core"
 # shellcheck disable=SC2086
 make -C /tmp/gitsrc -j"$(nproc)" prefix=/opt/astra-dev/git $GIT_MAKE_OPTS >/tmp/git-build.log 2>&1 \
@@ -148,8 +154,23 @@ done
 # ldd -r ловит неразрешённые символы: библиотека может быть на месте, а версия не та
 ldd -r "$DIST/git/libexec/git-core/git-remote-https" 2>&1 | grep -E 'not found|undefined symbol' && {
     echo "ОШИБКА: git-remote-https не линкуется." >&2; exit 1; }
+# Белый список ПРЯМЫХ зависимостей (DT_NEEDED). Именно прямых: ldd печатает всю
+# транзитивную цепочку, куда входят собственные зависимости libcurl4 (krb5, ldap,
+# nghttp2 и пр.) — они приезжают вместе с ней одним пакетом и вопросов не вызывают.
+# В сборочном контейнере -dev пакетов много, и легко незаметно прилинковать
+# библиотеку, которой на целевой машине нет: так вылезал libexpat.so.1 —
+# libcurl4 его НЕ тянет, и helper падал при загрузке.
+BAD="$(readelf -d "$DIST/git/libexec/git-core/git-remote-https" \
+       | awk -F'[][]' '/NEEDED/{print $2}' \
+       | grep -vE '^(libcurl\.so\.4|libz\.so\.1|libc\.so\.6|libdl\.so\.2|libpthread\.so\.0|libm\.so\.6|librt\.so\.1)$' || true)"
+[ -z "$BAD" ] || {
+    echo "ОШИБКА: git-remote-https тянет лишние библиотеки:" >&2
+    printf '  %s\n' $BAD >&2
+    echo "        На целевой машине их может не быть. Отключи ненужное в GIT_MAKE_OPTS." >&2
+    exit 1; }
 echo "git: транспорты — $(ls "$DIST/git/libexec/git-core" | grep '^git-remote-' | tr '\n' ' ')"
-echo "git: libcurl — $(ldd "$DIST/git/libexec/git-core/git-remote-https" | grep -o 'libcurl[^ ]*')"
+echo "git: прямые зависимости git-remote-https — $(readelf -d \
+    "$DIST/git/libexec/git-core/git-remote-https" | awk -F'[][]' '/NEEDED/{print $2}' | tr '\n' ' ')"
 echo "git: $(du -sh "$DIST/git" | cut -f1)"
 
 # ---------------------------------------------------------------- codelldb (отладчик)
