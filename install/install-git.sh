@@ -55,10 +55,13 @@ if [ -f /etc/gitconfig ]; then
 fi
 
 # Симлинков мало: если $BIN не стоит в PATH раньше /usr/bin, `git` останется
-# системным и lazygit так же откажется стартовать. В user-режиме правим PATH
-# сами; в system-режиме /usr/local/bin уже раньше /usr/bin в /etc/profile
-# (и install-system.sh кладёт /etc/profile.d/astra-dev.sh на случай, когда нет).
-if [ "$MODE" != system ]; then
+# системным и lazygit так же откажется стартовать. Полагаться на то, что порядок
+# в /etc/profile «и так правильный», нельзя — у давно заведённых пользователей в
+# ~/.bashrc/~/.profile накопились свои правки PATH.
+if [ "$MODE" = system ]; then
+    say "PATH → /etc/profile.d/astra-dev-path.sh"
+    ensure_system_path
+else
     say "PATH → ~/.bashrc, ~/.profile"
     ensure_user_path
 fi

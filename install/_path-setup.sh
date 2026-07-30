@@ -14,16 +14,23 @@
 PATH_MARK_BEG='# >>> astra-dev-setup PATH >>>'
 PATH_MARK_END='# <<< astra-dev-setup PATH <<<'
 
-# Вписывает блок в ~/.bashrc и ~/.profile и применяет его к PATH самого
+# Вписывает блок в ~/.bashrc и в ЛОГИН-файл и применяет его к PATH самого
 # установщика (чтобы проверки ниже смотрели на итоговое состояние, а не на
-# унаследованное). .bashrc — интерактивные и (через дебиановский .profile)
-# логин-шеллы; .profile — не-bash логин-шеллы и графическая сессия, откуда
-# nvim запускают из меню и .bashrc не читается вовсе.
+# унаследованное). .bashrc — интерактивные шеллы; логин-файл — графическая
+# сессия, откуда nvim запускают из меню и .bashrc не читается вовсе.
+#
+# Логин-файл нельзя жёстко брать как ~/.profile: bash в логин-шелле читает
+# ТОЛЬКО ПЕРВЫЙ существующий из ~/.bash_profile, ~/.bash_login, ~/.profile и
+# остальные игнорирует. У давно заведённых пользователей ~/.bash_profile обычно
+# есть — и правка в ~/.profile у них просто не выполняется.
 ensure_user_path() {
-    local f
-    touch "$HOME/.bashrc"
-    for f in "$HOME/.bashrc" "$HOME/.profile"; do
-        [ -f "$f" ] || continue          # .profile не создаём, если его нет
+    local f login
+    for login in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+        [ -f "$login" ] && break
+    done                                  # если нет ни одного — создадим ~/.profile
+
+    touch "$HOME/.bashrc" "$login"
+    for f in "$HOME/.bashrc" "$login"; do
         if grep -qF "$PATH_MARK_BEG" "$f"; then
             # разделитель | — в самих маркерах есть '#'
             sed -i "\|^${PATH_MARK_BEG}\$|,\|^${PATH_MARK_END}\$|d" "$f"
@@ -45,6 +52,27 @@ EOF
     case ":$PATH:" in
         ":$HOME/.local/bin:"*) ;;
         *) PATH="$HOME/.local/bin:$PATH"; export PATH ;;
+    esac
+    hash -r 2>/dev/null || true
+}
+
+# То же для системной установки: /usr/local/bin должен быть ПЕРВЫМ в PATH, а не
+# просто присутствовать. Проверка «есть ли вообще» тут бесполезна — /etc/profile
+# кладёт его почти всегда, и при порядке /usr/bin:/usr/local/bin выигрывает
+# системный git 2.20. Пишем в /etc/profile.d, чтобы правило действовало для ВСЕХ
+# пользователей: install-git.sh в режиме system чужие ~/.bashrc не трогает.
+ensure_system_path() {
+    cat > /etc/profile.d/astra-dev-path.sh <<'EOF'
+# astra-dev-setup: /usr/local/bin строго первым (там наш git, nvim, rust-analyzer)
+case ":$PATH:" in
+    ":/usr/local/bin:"*) ;;
+    *) PATH="/usr/local/bin:$PATH"; export PATH ;;
+esac
+EOF
+    chmod 0644 /etc/profile.d/astra-dev-path.sh
+    case ":$PATH:" in
+        ":/usr/local/bin:"*) ;;
+        *) PATH="/usr/local/bin:$PATH"; export PATH ;;
     esac
     hash -r 2>/dev/null || true
 }
