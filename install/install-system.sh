@@ -29,6 +29,8 @@ SKEL="$PREFIX/skel"            # заготовка домашки пользо�
 say(){ printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 # offline_lazy_cfg (правки lazy.lua под офлайн) + bundle_id (отпечаток бандла)
 . "$HERE/_offline-lazy-cfg.sh"
+. "$HERE/_path-setup.sh"   # ensure_system_path: /usr/local/bin первым для всех
+. "$HERE/_verify.sh"       # verify_bin, verify_git_transport
 
 [ -f "$DIST/nvim.tar.gz" ] || { echo "Нет собранного dist/ (ожидался $DIST). Сначала ./build/build-all.sh на хосте."; exit 1; }
 
@@ -223,23 +225,29 @@ say "cargo офлайн-конфиг → $SKEL/.cargo/config.toml"
 cp "$ROOT/cargo/config.toml" "$SKEL/.cargo/config.toml"
 
 # --- окружение для всех: PATH + засев cargo-конфига при входе ---------------
+# PATH — общей функцией (тот же файл кладёт install-git.sh в режиме system),
+# чтобы правило порядка каталогов было ровно в одном месте.
+say "PATH для всех → /etc/profile.d/astra-dev-path.sh"
+ensure_system_path
+
 say "Окружение для всех → /etc/profile.d/astra-dev.sh"
 cat > /etc/profile.d/astra-dev.sh <<EOF
-# astra-dev-setup: общее окружение
-# /usr/local/bin должен быть ПЕРВЫМ, а не просто присутствовать: там наш git
-# (системный /usr/bin/git ~2.20 не годится для lazygit), nvim, rust-analyzer.
-# Проверка «есть ли вообще в PATH» тут не годится — он почти всегда есть, и
-# при порядке /usr/bin:/usr/local/bin выигрывал бы системный бинарь.
-case ":\$PATH:" in
-    ":/usr/local/bin:"*) ;;                       # уже первый — не трогаем
-    *) PATH="/usr/local/bin:\$PATH"; export PATH ;;
-esac
+# astra-dev-setup: общее окружение (PATH — в astra-dev-path.sh)
 # засев cargo-офлайн-конфига пользователю (один раз)
 if [ ! -e "\$HOME/.cargo/config.toml" ] && [ -f "$SKEL/.cargo/config.toml" ]; then
     mkdir -p "\$HOME/.cargo" && cp "$SKEL/.cargo/config.toml" "\$HOME/.cargo/config.toml"
 fi
 EOF
 chmod 0644 /etc/profile.d/astra-dev.sh
+
+# --- проверка ---------------------------------------------------------------
+say "Проверка"
+# noexec: обёртка nvim при запуске засевает LazyVim в $HOME — от root не надо
+verify_bin nvim /usr/local/bin/nvim noexec || true
+if [ -x "$PREFIX/git/bin/git" ]; then
+    verify_bin git "$PREFIX/git/bin/git" || true
+    verify_git_transport "$PREFIX/git"   || true
+fi
 
 # --- итог -------------------------------------------------------------------
 cat <<EOF

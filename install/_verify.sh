@@ -5,22 +5,27 @@
 # Проверяет, что из PATH запускается именно наш бинарь, а не системный. Молча
 # при успехе; при расхождении показывает, кто перекрывает и чем это лечится —
 # иначе установка «проходит успешно», а версия остаётся старой.
+# Третий аргумент noexec — не запускать бинарь ради версии. Нужен для обёртки
+# /usr/local/bin/nvim: она при ЛЮБОМ запуске засевает LazyVim в $HOME, а от root
+# это разложило бы конфиг и плагины в /root.
 verify_bin() {
-    local name="$1" want="$2" got
+    local name="$1" want="$2" mode="${3:-}" got ver
     got="$(command -v "$name" 2>/dev/null || true)"
 
     if [ -z "$got" ]; then
         printf '  ! %s не найден в PATH (ожидался %s)\n' "$name" "$want"
         return 1
     fi
+    [ "$mode" = noexec ] && ver='' || ver="$("$got" --version 2>/dev/null | head -1)"
+
     # сравниваем по разыменованному пути: got — обычно симлинк на want
     if [ "$got" -ef "$want" ] || [ "$(readlink -f "$got")" = "$(readlink -f "$want")" ]; then
-        printf '  %s → %s  [%s]\n' "$name" "$got" "$("$got" --version 2>/dev/null | head -1)"
+        printf '  %s → %s  %s\n' "$name" "$got" "${ver:+[$ver]}"
         return 0
     fi
 
     printf '\n  ! %s из PATH — это %s, а не наш %s\n' "$name" "$got" "$want"
-    printf '    версия: %s\n' "$("$got" --version 2>/dev/null | head -1)"
+    [ -n "$ver" ] && printf '    версия: %s\n' "$ver"
     printf '    перекрывают (which -a):\n'
     which -a "$name" 2>/dev/null | sed 's/^/      /'
     printf '    порядок PATH:\n'
