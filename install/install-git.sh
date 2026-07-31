@@ -59,7 +59,7 @@ fi
 # в /etc/profile «и так правильный», нельзя — у давно заведённых пользователей в
 # ~/.bashrc/~/.profile накопились свои правки PATH.
 if [ "$MODE" = system ]; then
-    say "PATH → /etc/profile.d/astra-dev-path.sh"
+    say "PATH → /etc/profile.d/zz-astra-dev-path.sh"
     ensure_system_path
 else
     say "PATH → ~/.bashrc, ~/.profile"

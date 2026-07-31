@@ -71,11 +71,17 @@ if [ -f "$DIST/ts-lsp.tar.gz" ]; then
     ln -sf ~/.local/ts-lsp/bin/vtsls ~/.local/bin/vtsls
 fi
 
+# Парсеры кладём в install_dir ветки main (~/.local/share/nvim/site/parser), а не
+# в ~/.config/nvim/parser: nvim-treesitter смотрит только туда, а LazyVim по его
+# ответу решает, включать ли подсветку/отступы/свёртки. Подробности — в
+# _offline-lazy-cfg.sh (offline_ts_cfg).
 if [ -f "$DIST/parsers.tar.gz" ]; then
-    say "treesitter-парсеры → ~/.config/nvim/parser"
-    mkdir -p ~/.config/nvim/parser
-    tar xzf "$DIST/parsers.tar.gz" -C ~/.config/nvim/parser
+    say "treesitter-парсеры → ~/.local/share/nvim/site/parser"
+    rm -rf ~/.config/nvim/parser          # место из прежних версий комплекта
+    mkdir -p ~/.local/share/nvim/site/parser
+    tar xzf "$DIST/parsers.tar.gz" -C ~/.local/share/nvim/site/parser
 fi
+offline_ts_cfg ~/.config/nvim
 
 say "Nerd Font → ~/.local/share/fonts"
 tar xzf "$DIST/fonts.tar.gz" -C ~/.local/share/fonts

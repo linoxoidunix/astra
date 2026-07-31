@@ -20,7 +20,13 @@ FD_VER="${FD_VER:-10.2.0}"          # fd для файлового пикера 
 CODELLDB_VER="${CODELLDB_VER:-v1.12.2}"  # отладчик C/C++/Rust (DAP-адаптер + свой lldb)
 LAZYGIT_VER="${LAZYGIT_VER:-0.63.1}"     # git-TUI для <leader>gg; статический Go-бинарь
 GIT_VER="${GIT_VER:-2.55.0}"             # свой git: в Astra 1.7 ~2.20, а lazygit требует >= 2.32
-TS_LANGS="${TS_LANGS:-c cpp cmake rust lua luadoc vim vimdoc query markdown markdown_inline bash json yaml toml regex printf gitcommit diff javascript typescript tsx jsdoc html css}"
+# python, xml, luap — не для нас, а чтобы покрыть весь ensure_installed LazyVim
+# (lazyvim/plugins/treesitter.lua). Любой недостающий из его списка заставляет
+# LazyVim доустанавливать парсер, а офлайн это упирается в tree-sitter CLI:
+#   Unmet requirements for nvim-treesitter `main`: ... x tree-sitter (CLI)
+# Спек комплекта эту попытку и так глушит (см. offline_ts_cfg), но с полным
+# набором глушить нечего.
+TS_LANGS="${TS_LANGS:-c cpp cmake rust lua luadoc luap vim vimdoc query markdown markdown_inline bash json yaml toml regex printf gitcommit diff javascript typescript tsx jsdoc html css python xml}"
 
 DIST=/out
 mkdir -p "$DIST/bin" "$DIST/fonts" "$DIST/parsers"

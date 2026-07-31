@@ -28,9 +28,10 @@ verify_bin() {
     [ -n "$ver" ] && printf '    версия: %s\n' "$ver"
     printf '    перекрывают (which -a):\n'
     which -a "$name" 2>/dev/null | sed 's/^/      /'
-    printf '    порядок PATH:\n'
-    printf '%s\n' "$PATH" | tr ':' '\n' | sed 's/^/      /'
-    printf '    лечится удалением лишнего бинаря либо правкой PATH в ~/.bashrc.\n\n'
+    printf '    порядок PATH (выигрывает верхний):\n'
+    printf '%s\n' "$PATH" | tr ':' '\n' | nl -ba | sed 's/^/      /'
+    printf '    Значит наш каталог в PATH позже — кто-то препендит PATH после нашей правки.\n'
+    printf '    Найти виновника:  bash install/diag-git.sh   (разделы 3 и 4)\n\n'
     return 1
 }
 

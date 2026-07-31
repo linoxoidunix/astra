@@ -180,11 +180,25 @@ nvim
 `nvim` — без прав root. При установке `install-system.sh` config+плагины LazyVim
 засеются каждому пользователю при первом запуске `nvim`.
 
-**PATH для всех пользователей** ставит `/etc/profile.d/astra-dev-path.sh` — он
+**PATH для всех пользователей** ставит `/etc/profile.d/zz-astra-dev-path.sh` — он
 двигает `/usr/local/bin` в **начало** `PATH` (там наш git, nvim, rust-analyzer).
 Тот же файл кладёт `install/install-git.sh system`, поэтому правило порядка
 каталогов живёт ровно в одном месте; в `astra-dev.sh` остался только засев
 cargo-конфига. Чужие `~/.bashrc` системная установка **не трогает** вовсе.
+
+Две детали, из-за которых старый вариант не работал:
+
+* имя со `zz-` — `/etc/profile` читает `/etc/profile.d/*.sh` **по алфавиту**, и
+  прежний `astra-dev-path.sh` шёл одним из первых: любая чужая правка `PATH`
+  после него снова уводила `/usr/local/bin` вниз, за `/usr/bin`. Старый файл
+  установщик удаляет;
+* правка не «добавь каталог, если его нет», а **пересборка** `PATH`: наш каталог
+  первым, остальные — по одному разу. Проверка «уже первый — не трогаем»
+  бесполезна (она смотрит на `PATH` в момент своего выполнения), а ветка «иначе
+  допишу в начало» плодила копии каталога на каждый чужой препенд — отсюда и
+  брались хвосты вида `~/.local/bin:/usr/bin:~/.local/bin:~/.cargo/bin:…`.
+  Заодно установщик убирает голую строку `export PATH="$HOME/.local/bin:$PATH"`,
+  которую дописывали ранние версии (маркеров у неё нет, чистка её не видела).
 
 Важно: `/etc/profile.d/*` читается только при **входе в систему**. У тех, кто уже
 залогинен, `PATH` обновится после перелогина (или сразу — `exec bash -l` в их
@@ -246,7 +260,10 @@ bash install/install-ts.sh              # или: sudo bash install/install-ts.s
 rm -rf ~/.config/nvim ~/.local/share/nvim ~/.local/state/nvim ~/.cache/nvim
 tar xzf dist/lazyvim-config.tar.gz -C ~/.config
 tar xzf dist/lazyvim-data.tar.gz   -C ~/.local/share
-mkdir -p ~/.config/nvim/parser && tar xzf dist/parsers.tar.gz -C ~/.config/nvim/parser
+# парсеры — в install_dir ветки main, иначе nvim-treesitter их не увидит (см. п.5
+# в разделе про старые бандлы)
+mkdir -p ~/.local/share/nvim/site/parser
+tar xzf dist/parsers.tar.gz -C ~/.local/share/nvim/site/parser
 ```
 `install-ts.sh` сам по себе ставит **только** Node + vtsls; редакторная интеграция
 (typescript-extra в конфиге, плагины, парсеры js/ts) — это шаг 2. Не трогаются
@@ -536,6 +553,56 @@ rustc --version                                     # 1.70.0 из репозит
 (`tokio 1.47` + rustc 1.70) сборки 2023-11-27, 2024-06-03 и 2025-06-30 отрабатывают без
 паники, а свежая 2026-07-20 на том же проекте падает ровно этим сообщением — с
 устаревшим sysroot новые сборки хуже, а не лучше.
+
+**5. `Unmet requirements for nvim-treesitter main: ❌ tree-sitter (CLI)` и следом
+`Failed to install tree-sitter-cli with mason.nvim`.** Всплывает на каждом старте.
+Причина глубже, чем кажется: LazyVim держит `nvim-treesitter` на ветке `main`, а там
+парсеры ищутся **только** в `install_dir` (по умолчанию `~/.local/share/nvim/site`).
+Прежние версии комплекта клали `.so` в `~/.config/nvim/parser` — Neovim их подхватывал
+(каталог в `rtp`), но `nvim-treesitter.get_installed()` отвечал «ничего не установлено».
+Отсюда два следствия:
+
+* LazyVim считал недостающими все языки из своего `ensure_installed` и лез их ставить,
+  а на `main` для этого нужен `tree-sitter` CLI — офлайн взять его неоткуда;
+* хуже того, `LazyVim.treesitter.have(ft)` был ложным **всегда**, а его автокоманда
+  `FileType` по этому флагу включает подсветку, отступы и свёртки. То есть treesitter
+  фактически не работал вовсе, хотя парсеры лежали на диске.
+
+Проверить у себя (25 — сколько парсеров в бандле):
+```bash
+nvim --headless -c 'lua require("lazy").load({plugins={"nvim-treesitter"}});
+  print(#require("nvim-treesitter").get_installed("parsers"),
+        require("lazyvim.util.treesitter").have("c"))' -c 'qa!'
+# было: 0 false     стало: 25 true
+```
+Лечится переустановкой (`install.sh` / `install-system.sh`): парсеры едут в
+`~/.local/share/nvim/site/parser`, при системной установке — в общий
+`/opt/astra-dev/ts/parser`, а спек `astra-treesitter.lua` обнуляет `ensure_installed`
+(доустанавливать офлайн всё равно нечем) и при наличии общего каталога переводит на
+него `install_dir`. Сам `tree-sitter` CLI в комплект не входит и не нужен: парсеры
+собираются на хосте при сборке бандла, на Astra ничего не компилируется.
+`:checkhealth nvim-treesitter` про отсутствие CLI по-прежнему напишет — это просто
+отчёт, работе он не мешает.
+
+**6. `E: Sub-process /usr/bin/dpkg returned an error code (1)` на любом `apt install`.**
+Комплекта не касается — сломан системный `dpkg`, обычно чужим пакетом. Типичное на
+Astra:
+```
+ERROR: Module mpm_event is enabled - cannot proceed due to conflicts.
+dpkg: ошибка при обработке пакета apache2 (--configure)
+ls: невозможно получить доступ к '/etc/X11/trusted.d/*': Нет такого файла
+```
+dpkg настраивает пакеты по очереди, и один упавший `postinst` обрывает всю транзакцию:
+`apt` возвращает 1, даже если запрошенные пакеты уже встали. Дальше каждая следующая
+установка начинается с попытки донастроить отложенное — и спотыкается о то же самое.
+```bash
+bash install/fix-dpkg.sh              # показать, что именно не настроено
+sudo bash install/fix-dpkg.sh --fix   # чинить, спрашивая на каждый шаг
+```
+Скрипт знает две астровские причины (пустой `/etc/X11/trusted.d`, конфликт MPM у
+apache2), после них делает `dpkg --configure -a` и `apt-get -f install`. Правку
+apache2 он **не делает молча**: выключение `mpm_event` меняет модель обработки
+запросов, и на боевом сервере это решение администратора, а не установщика.
 
 ### Диагностика одной командой
 

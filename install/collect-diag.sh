@@ -113,6 +113,12 @@ p EXTRAS-L "$([ -f "$CFG/lua/plugins/extras.lua" ] && echo present-OLD || echo a
 p LZJSON "$(grep -c 'lazyvim.plugins.extras' "$CFG/lazyvim.json" 2>/dev/null || echo 0) extras, ver=$(grep -oE '"version":[ ]*[0-9]+' "$CFG/lazyvim.json" 2>/dev/null | tr -dc '0-9')"
 p BLINK-SP "$([ -f "$CFG/lua/plugins/astra-blink-offline.lua" ] && grep -o 'implementation = "[a-z_]*"' "$CFG/lua/plugins/astra-blink-offline.lua" || echo no-spec)"
 p RUST-SP "$([ -f "$CFG/lua/plugins/astra-rust.lua" ] && echo present || echo no-spec)"
+# nvim-treesitter ветки main видит парсеры ТОЛЬКО в своём install_dir. site=0 при
+# непустом old= значит парсеры лежат по-старому и treesitter не работает вовсе
+p TS-PARSER "site=$(ls "$HOME/.local/share/nvim/site/parser" 2>/dev/null | wc -l) shared=$(ls /opt/astra-dev/ts/parser 2>/dev/null | wc -l) old=$(ls "$CFG/parser" 2>/dev/null | wc -l)"
+p TS-SPEC "$([ -f "$CFG/lua/plugins/astra-treesitter.lua" ] && echo present || echo no-spec)"
+# незавершённые пакеты dpkg: пока они есть, ЛЮБОЙ apt install возвращает ошибку
+p DPKG "$(command -v dpkg-query >/dev/null 2>&1 && { b=$(dpkg-query -f '${Package} ${Status}\n' -W 2>/dev/null | awk '$3!="ok"||($2=="install"&&$4!="installed"){print $1}' | tr '\n' ' '); echo "${b:-ok}"; } || echo no-dpkg)"
 LOG="$HOME/.local/state/nvim/lsp.log"
 p LSPLOG "$([ -f "$LOG" ] && echo "$(grep -ci 'panicked' "$LOG") panics, $(du -h "$LOG" | cut -f1)" || echo none)"
 p LSP-MSG "$(grep -i 'panicked' "$LOG" 2>/dev/null | tail -1 | grep -oE 'panicked.{0,45}')"

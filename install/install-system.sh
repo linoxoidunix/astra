@@ -6,7 +6,8 @@
 #   nvim, rust-analyzer  → /usr/local/bin
 #   treesitter-парсеры   → в runtime самого nvim (виден всем)
 #   Nerd Font            → /usr/share/fonts
-#   PATH/окружение       → /etc/profile.d/astra-dev.sh
+#   PATH                 → /etc/profile.d/zz-astra-dev-path.sh
+#   окружение            → /etc/profile.d/astra-dev.sh
 # Neovim-часть (config+плагины) и cargo-конфиг у каждого пользователя свои —
 # засеваются в его $HOME при первом запуске (wrapper nvim + /etc/profile.d).
 #
@@ -42,12 +43,18 @@ rm -rf "$PREFIX/nvim"
 tar xzf "$DIST/nvim.tar.gz" -C "$PREFIX"
 NVIM_REAL="$PREFIX/nvim/bin/nvim"
 
-# --- treesitter-парсеры → в системный runtime nvim (виден всем) -------------
+# --- treesitter-парсеры → общий install_dir (виден всем) --------------------
+# Не в runtime nvim: nvim-treesitter ветки main ищет парсеры ТОЛЬКО в своём
+# install_dir, а LazyVim по его ответу решает, включать ли подсветку. Каталог
+# один на всех, спек в skel направляет туда install_dir (см. offline_ts_cfg).
 if [ -f "$DIST/parsers.tar.gz" ]; then
-    say "treesitter-парсеры → runtime nvim (общие для всех)"
-    PARSER_DIR="$PREFIX/nvim/share/nvim/runtime/parser"
-    mkdir -p "$PARSER_DIR"
-    tar xzf "$DIST/parsers.tar.gz" -C "$PARSER_DIR"
+    say "treesitter-парсеры → $TS_SHARED_DIR/parser (общие для всех)"
+    rm -rf "$TS_SHARED_DIR" "$PREFIX/nvim/share/nvim/runtime/parser"
+    mkdir -p "$TS_SHARED_DIR/parser" "$TS_SHARED_DIR/queries"
+    tar xzf "$DIST/parsers.tar.gz" -C "$TS_SHARED_DIR/parser"
+    # queries каталог пустой, но нужен: get_install_dir() иначе пытается создать
+    # его от имени обычного пользователя в /opt и пишет ошибку в лог
+    chmod -R a+rX "$TS_SHARED_DIR"
 fi
 
 # --- rust-analyzer → /usr/local/bin ----------------------------------------
@@ -172,6 +179,7 @@ rm -rf "$SKEL/.config/nvim" "$SKEL/.local/share/nvim"
 tar xzf "$DIST/lazyvim-config.tar.gz" -C "$SKEL/.config"
 tar xzf "$DIST/lazyvim-data.tar.gz"   -C "$SKEL/.local/share"
 offline_lazy_cfg "$SKEL/.config/nvim/lua/config/lazy.lua"
+offline_ts_cfg   "$SKEL/.config/nvim"
 # из skel читают обычные пользователи — права из архива могут быть уже
 chmod -R a+rX "$SKEL"
 # Отпечаток бандла кладём рядом с плагинами: обёртка сравнивает его с копией
@@ -203,6 +211,11 @@ for home in /root /home/*; do
     # sed -i пересоздаёт файл от root — возвращаем владельца по каталогу.
     offline_lazy_cfg "$cfg/lua/config/lazy.lua"
     chown --reference="$cfg" "$cfg/lua/config/lazy.lua" 2>/dev/null || true
+    # спек treesitter доехал бы и обёрткой (она синхронизирует astra-*.lua при
+    # каждом запуске), но парсеры переехали — пусть работает уже с этого входа
+    offline_ts_cfg "$cfg"
+    chown --reference="$cfg" "$cfg/lua/plugins/astra-treesitter.lua" 2>/dev/null || true
+    rm -rf "$cfg/parser"    # место парсеров из прежних версий комплекта
     # плагины под новые экстры перекладывает обёртка при следующем запуске nvim
     # (по .astra-bundle-id) — здесь только сам список экстр
     if [ -n "$EXTRAS" ]; then
@@ -227,12 +240,12 @@ cp "$ROOT/cargo/config.toml" "$SKEL/.cargo/config.toml"
 # --- окружение для всех: PATH + засев cargo-конфига при входе ---------------
 # PATH — общей функцией (тот же файл кладёт install-git.sh в режиме system),
 # чтобы правило порядка каталогов было ровно в одном месте.
-say "PATH для всех → /etc/profile.d/astra-dev-path.sh"
+say "PATH для всех → /etc/profile.d/zz-astra-dev-path.sh"
 ensure_system_path
 
 say "Окружение для всех → /etc/profile.d/astra-dev.sh"
 cat > /etc/profile.d/astra-dev.sh <<EOF
-# astra-dev-setup: общее окружение (PATH — в astra-dev-path.sh)
+# astra-dev-setup: общее окружение (PATH — в zz-astra-dev-path.sh)
 # засев cargo-офлайн-конфига пользователю (один раз)
 if [ ! -e "\$HOME/.cargo/config.toml" ] && [ -f "$SKEL/.cargo/config.toml" ]; then
     mkdir -p "\$HOME/.cargo" && cp "$SKEL/.cargo/config.toml" "\$HOME/.cargo/config.toml"

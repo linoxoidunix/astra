@@ -35,11 +35,33 @@ done
 echo
 echo "=== 3. PATH этого терминала ==="
 printf '%s\n' "$PATH" | tr ':' '\n' | nl -ba | sed 's/^/  /'
+# Дубли — верный признак, что какой-то файл входа препендит каталог безусловно
+# (например голая строка export PATH="$HOME/.local/bin:$PATH" от старой версии
+# установщика). Сам по себе дубль безвреден, но показывает, где искать виновника.
+dups="$(printf '%s\n' "$PATH" | tr ':' '\n' | sort | uniq -d)"
+[ -n "$dups" ] && { echo; echo "  ! каталоги встречаются в PATH больше одного раза:"; \
+    printf '%s\n' "$dups" | sed 's/^/      /'; }
+# Каталог с нашим git обязан стоять раньше /usr/bin, иначе выигрывает системный.
+echo
+for d in "$HOME/.local/bin" /usr/local/bin; do
+    [ -x "$d/git" ] || continue
+    n_ours="$(printf '%s\n' "$PATH" | tr ':' '\n' | grep -nxF "$d"    | head -1 | cut -d: -f1)"
+    n_usr="$( printf '%s\n' "$PATH" | tr ':' '\n' | grep -nxF /usr/bin | head -1 | cut -d: -f1)"
+    if [ -z "$n_ours" ]; then
+        echo "  ! $d вообще нет в PATH"
+    elif [ -n "$n_usr" ] && [ "$n_ours" -gt "$n_usr" ]; then
+        echo "  ! $d (#$n_ours) стоит ПОЗЖЕ /usr/bin (#$n_usr) — выигрывает системный git"
+    else
+        echo "  $d (#$n_ours) раньше /usr/bin (#${n_usr:-нет}) — ок"
+    fi
+done
 
 echo
 echo "=== 4. правки PATH в файлах входа ==="
-for f in "$HOME/.bashrc" "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.bash_login" \
-         /etc/profile.d/astra-dev.sh /etc/profile.d/astra-dev-path.sh; do
+# Порядок в списке — примерно порядок чтения. Ищем тех, кто препендит PATH ПОСЛЕ
+# нашей правки: именно так /usr/bin оказывается впереди /usr/local/bin.
+for f in /etc/environment /etc/profile /etc/bash.bashrc /etc/profile.d/*.sh \
+         "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile" "$HOME/.bashrc"; do
     [ -f "$f" ] || { p "$f" "нет файла"; continue; }
     p "$f" "$(grep -c 'astra-dev-setup PATH\|astra-dev-setup:' "$f" 2>/dev/null) наших строк-маркеров"
     grep -n 'PATH' "$f" 2>/dev/null | sed 's/^/    /'
