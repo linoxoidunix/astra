@@ -73,7 +73,40 @@ else
     p PROJ-ERR "no Cargo.toml, pass project path as argument"
 fi
 
-# --- 4. сборка из терминала -------------------------------------------------
+# --- 4. модель проекта и сборка из терминала --------------------------------
+# cargo metadata — первое, что запускает rust-analyzer при открытии проекта.
+# Его провал даёт в nvim ровно «rust-analyzer health status is [error]: Failed
+# to load workspaces», а по этой строке причины не видно. Типичная причина в
+# нашем комплекте — офлайн-реестр: ~/.cargo/config.toml подменяет crates-io на
+# directory-источник /usr/share/cargo/registry, и если librust-*-dev не встали
+# (например, apt возвращал 1 из-за оборванной транзакции dpkg — см. fix-dpkg.sh),
+# каталога нет и cargo падает на разрешении зависимостей.
+# Без --no-deps намеренно: именно полный граф зависимостей и упирается в реестр,
+# а --no-deps его не строит и провал бы не показал.
+if [ -f "$PROJ/Cargo.toml" ] && have cargo; then
+    # stderr в захват, stdout (JSON метаданных) в /dev/null
+    M=$( cd "$PROJ" && run 300 cargo metadata --offline --format-version 1 2>&1 >/dev/null ); MRC=$?
+    if [ "$MRC" = 0 ]; then
+        p CARGO-META OK
+    else
+        p CARGO-META "FAIL rc=$MRC (124 = не уложился в 300s)"
+        # Верхняя строка cargo («failed to get X as a dependency of package Y
+        # (длинный путь)») в 72 символа не влезает и ничего не объясняет, поэтому
+        # отдаём всю ширину корню причины — ПОСЛЕДНЕМУ блоку «Caused by:».
+        # Самый глубокий блок часто голое «No such file or directory (os error 2)»
+        # без имени файла — такие пропускаем и берём предыдущий, где путь назван.
+        C1=$(printf '%s' "$M" | awk '
+            /^Caused by:/ {
+                while ((getline l) > 0 && l ~ /^[[:space:]]*$/) ;
+                sub(/^[[:space:]]+/, "", l)
+                if (l !~ /os error [0-9]+/) last = l
+            }
+            END { print last }')
+        [ -n "$C1" ] || C1=$(printf '%s' "$M" | grep -m1 '^error')
+        p CARGO-M1 "${C1:-no details}"
+    fi
+fi
+
 if [ -f "$PROJ/Cargo.toml" ] && have cargo; then
     [ "$CLEAN" = 1 ] && { ( cd "$PROJ" && cargo clean >/dev/null 2>&1 ); p CLEAN "cargo clean done"; }
     B=$( cd "$PROJ" && run 900 cargo build --offline 2>&1 )

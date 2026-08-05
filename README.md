@@ -627,17 +627,26 @@ bash install/collect-diag.sh ~/dev/hello_world --clean    # + cargo clean пер
 03 RA        rust-analyzer 0.3.1748-standalone
 04 RA-PATH   /usr/local/bin/rust-analyzer [x1]
 05 RUSTC     rustc 1.70.0 (90c541806 2023-05-31)
-09 RUST-SRC  OK
-12 TOKIO     1.47.5
-13 PM2       1.0.86
-14 RMETA     total=12 tiny=0
-17 BUILD     OK
-19 RA-STATS  exprs: 47, ??ty: 0 (0%)
-20 RA-PANIC  0 hits
-22 RA-NOPM   0 hits (proc-macros off)
-24 EXTRAS-L  absent-ok
-26 BLINK-SP  implementation = "lua"
-32 END       lines=32 file=/tmp/astra-diag.txt
+11 RUST-SRC  OK
+14 TOKIO     1.47.5
+15 PM2       1.0.86
+16 RMETA     total=12 tiny=0
+18 CARGO-META OK
+19 BUILD     OK
+20 RA-STATS  exprs: 47, ??ty: 0 (0%)
+21 RA-PANIC  0 hits
+23 RA-NOPM   0 hits (proc-macros off)
+28 EXTRAS-L  absent-ok
+30 BLINK-SP  implementation = "lua"
+39 END       lines=39 file=/tmp/astra-diag.txt
+```
+
+Сломанный офлайн-реестр выглядит так (`CARGO-M1` — корень причины, ради него
+верхняя строка cargo с длинным путём к пакету в отчёт не идёт):
+```
+18 CARGO-META FAIL rc=101 (124 = не уложился в 300s)
+19 CARGO-M1  failed to read root of directory source: /usr/share/cargo/r
+37 REGISTRY  0 crates, tokio=0
 ```
 
 Что читать в первую очередь:
@@ -648,6 +657,7 @@ bash install/collect-diag.sh ~/dev/hello_world --clean    # + cargo clean пер
 | `RUST-SRC` | `MISSING` объясняет панику про `Future::Output` без всякого `target/`: серверу нечем разрешать `Future` |
 | `TOKIO` / `PM2` | версии из лока; `proc-macro2 ≥ 1.0.107` при rustc 1.70 значит, что лок собран не MSRV-aware резолвером и проект не соберётся в принципе |
 | `RMETA tiny=N` | прямой детектор обрезанных метаданных (E0786); `> 0` — лечится `cargo clean` |
+| `CARGO-META` / `CARGO-M1` | `cargo metadata` — первое, что делает rust-analyzer при открытии проекта. `FAIL` здесь и есть то самое «Failed to load workspaces» в nvim, а `CARGO-M1` называет причину; чаще всего это пустой офлайн-реестр, тогда рядом `REGISTRY 0 crates` |
 | `BUILD` | воспроизводится ли поломка из терминала; `msrv-errors` отделяет MSRV-беду от битого `target/` |
 | `RA-PANIC` / `RA-NOPM` | паника есть с proc-макросами и нет без них → валит раскрытие `#[tokio::main]`; есть в обоих → дело в sysroot/типах, смотри `??ty` в `RA-STATS` |
 | `EXTRAS-L` / `BLINK-SP` / `RUST-SP` | доехали ли до домашки спеки комплекта; пока `present-OLD`/`no-spec` — ошибки с blink и порядком импортов будут повторяться |
